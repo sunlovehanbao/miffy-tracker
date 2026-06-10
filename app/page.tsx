@@ -1,7 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  type TouchEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Item, ItemCategory, ItemStore } from '@/types/item'
 
@@ -29,6 +35,11 @@ export default function Home() {
     alt: string
   } | null>(null)
   const [imageZoom, setImageZoom] = useState(1)
+  const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
+  const pinchStartDistance = useRef(0)
+  const pinchStartZoom = useRef(1)
+  const hasPinched = useRef(false)
 
   useEffect(() => {
     async function loadItems() {
@@ -55,8 +66,7 @@ export default function Home() {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setSelectedImage(null)
-        setImageZoom(1)
+        closeImageModal()
       }
     }
 
@@ -106,6 +116,62 @@ export default function Home() {
     )
   }
 
+  function closeImageModal() {
+    setSelectedImage(null)
+    setImageZoom(1)
+    pinchStartDistance.current = 0
+    hasPinched.current = false
+  }
+
+  function getTouchDistance(touches: TouchEvent<HTMLDivElement>['touches']) {
+    if (touches.length < 2) return 0
+
+    const firstTouch = touches[0]
+    const secondTouch = touches[1]
+    return Math.hypot(
+      firstTouch.clientX - secondTouch.clientX,
+      firstTouch.clientY - secondTouch.clientY,
+    )
+  }
+
+  function handleModalTouchStart(event: TouchEvent<HTMLDivElement>) {
+    if (event.touches.length === 2) {
+      pinchStartDistance.current = getTouchDistance(event.touches)
+      pinchStartZoom.current = imageZoom
+      hasPinched.current = true
+      return
+    }
+
+    const touch = event.touches[0]
+    touchStartX.current = touch.clientX
+    touchStartY.current = touch.clientY
+    hasPinched.current = false
+  }
+
+  function handleModalTouchMove(event: TouchEvent<HTMLDivElement>) {
+    if (event.touches.length !== 2 || pinchStartDistance.current === 0) return
+
+    event.preventDefault()
+    const nextDistance = getTouchDistance(event.touches)
+    const nextZoom = pinchStartZoom.current * (nextDistance / pinchStartDistance.current)
+    setImageZoom(Math.min(4, Math.max(0.5, nextZoom)))
+  }
+
+  function handleModalTouchEnd(event: TouchEvent<HTMLDivElement>) {
+    if (hasPinched.current) {
+      if (event.touches.length < 2) pinchStartDistance.current = 0
+      return
+    }
+
+    const touch = event.changedTouches[0]
+    const deltaX = touch.clientX - touchStartX.current
+    const deltaY = touch.clientY - touchStartY.current
+
+    if (Math.abs(deltaX) > 90 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      closeImageModal()
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#fbfdff] px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
@@ -125,26 +191,26 @@ export default function Home() {
         </header>
 
         <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="space-y-2">
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <label className="w-full flex-1 space-y-2">
               <span className="text-sm font-medium text-zinc-700">Search</span>
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search by name"
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
                 type="search"
               />
             </label>
 
-            <label className="space-y-2">
+            <label className="w-full flex-1 space-y-2">
               <span className="text-sm font-medium text-zinc-700">
                 Category
               </span>
               <select
                 value={categoryFilter}
                 onChange={(event) => setCategoryFilter(event.target.value)}
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
               >
                 <option value="">All categories</option>
                 {categories.map((category) => (
@@ -155,12 +221,12 @@ export default function Home() {
               </select>
             </label>
 
-            <label className="space-y-2">
+            <label className="w-full flex-1 space-y-2">
               <span className="text-sm font-medium text-zinc-700">Store</span>
               <select
                 value={storeFilter}
                 onChange={(event) => setStoreFilter(event.target.value)}
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-950"
+                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
               >
                 <option value="">All stores</option>
                 {stores.map((store) => (
@@ -189,7 +255,7 @@ export default function Home() {
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
-          <section className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <section className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filteredItems.map((item) => (
               <article
                 key={item.id}
@@ -227,14 +293,14 @@ export default function Home() {
                     <div className="flex gap-2">
                       <Link
                         href={`/admin/edit/${item.id}`}
-                        className="rounded-md border border-zinc-200 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                        className="flex min-h-11 items-center rounded-md border border-zinc-200 px-4 py-2 text-base font-medium text-zinc-700 hover:bg-zinc-50"
                       >
                         Edit
                       </Link>
                       <button
                         type="button"
                         onClick={() => deleteItem(item)}
-                        className="rounded-md border border-red-200 px-3 py-1 text-sm font-medium text-red-600 hover:bg-red-50"
+                        className="min-h-11 rounded-md border border-red-200 px-4 py-2 text-base font-medium text-red-600 hover:bg-red-50"
                       >
                         Delete
                       </button>
@@ -263,13 +329,13 @@ export default function Home() {
 
       {selectedImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-zinc-950/80 p-4"
+          className="fixed inset-0 z-50 flex touch-none items-center justify-center overflow-hidden bg-zinc-950/80 p-4"
           role="dialog"
           aria-modal="true"
-          onClick={() => {
-            setSelectedImage(null)
-            setImageZoom(1)
-          }}
+          onClick={closeImageModal}
+          onTouchStart={handleModalTouchStart}
+          onTouchMove={handleModalTouchMove}
+          onTouchEnd={handleModalTouchEnd}
           onWheel={(event) => {
             event.preventDefault()
             setImageZoom((currentZoom) => {
@@ -281,11 +347,8 @@ export default function Home() {
         >
           <button
             type="button"
-            onClick={() => {
-              setSelectedImage(null)
-              setImageZoom(1)
-            }}
-            className="absolute right-4 top-4 rounded-full bg-white px-3 py-1 text-xl font-medium text-zinc-950 shadow"
+            onClick={closeImageModal}
+            className="absolute right-4 top-4 flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white px-3 py-1 text-2xl font-medium text-zinc-950 shadow"
             aria-label="Close image preview"
           >
             ×

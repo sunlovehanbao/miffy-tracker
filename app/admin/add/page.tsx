@@ -148,7 +148,7 @@ export default function AddItemPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white px-6 py-10 text-zinc-950">
+    <main className="min-h-screen bg-white px-4 py-8 text-base text-zinc-950 sm:px-6 sm:py-10">
       <div className="mx-auto w-full max-w-2xl">
         <h1 className="text-3xl font-semibold">Add Item</h1>
 
@@ -159,7 +159,7 @@ export default function AddItemPage() {
               required
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className="w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-950"
+              className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
               type="text"
             />
           </label>
@@ -173,7 +173,7 @@ export default function AddItemPage() {
                 onChange={(event) =>
                   setCategory(event.target.value as ItemCategory)
                 }
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-950"
+                className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
               >
                 {categories.map((option) => (
                   <option key={option} value={option}>
@@ -188,7 +188,7 @@ export default function AddItemPage() {
               <select
                 value={store}
                 onChange={(event) => setStore(event.target.value as ItemStore)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-950"
+                className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
               >
                 {stores.map((option) => (
                   <option key={option} value={option}>
@@ -204,7 +204,7 @@ export default function AddItemPage() {
             <input
               value={quantity}
               onChange={(event) => setQuantity(event.target.value)}
-              className="w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-950"
+              className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
               min="1"
               type="number"
             />
@@ -215,14 +215,14 @@ export default function AddItemPage() {
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              className="min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-950"
+              className="min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
             />
           </label>
 
           <div className="space-y-2">
             <span className="text-sm font-medium">Image</span>
             <label
-              className="flex min-h-64 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 p-4 text-center transition hover:border-zinc-400"
+              className="flex min-h-[200px] cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 p-4 text-center transition hover:border-zinc-400 sm:min-h-64"
               onDragOver={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -244,7 +244,8 @@ export default function AddItemPage() {
               }}
             >
               <input
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/*"
+                capture="environment"
                 className="hidden"
                 onChange={handleImageChange}
                 type="file"
@@ -281,7 +282,7 @@ export default function AddItemPage() {
                 onBlur={() => importImageFromUrl(imageUrlInput)}
                 onChange={(event) => setImageUrlInput(event.target.value)}
                 onPaste={handleImageUrlPaste}
-                className="min-w-0 flex-1 rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-950"
+                className="min-h-11 min-w-0 flex-1 rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
                 placeholder="https://..."
                 type="url"
               />
@@ -308,7 +309,7 @@ export default function AddItemPage() {
           <button
             type="submit"
             disabled={isSubmitting || isUploading || isImportingImage}
-            className="rounded-md bg-zinc-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+            className="min-h-[50px] w-full rounded-md bg-zinc-950 px-5 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
           >
             {isSubmitting ? 'Adding...' : 'Add Item'}
           </button>
