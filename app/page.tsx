@@ -110,8 +110,14 @@ export default function Home() {
     <main className="min-h-screen bg-[#fbfdff] px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <header>
-          <h1 className="text-4xl font-semibold sm:text-5xl">
-            Miffy Collection 🐰
+          <h1 className="flex items-center text-4xl font-semibold sm:text-5xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/miffy-logo.png"
+              alt="Miffy"
+              className="w-10 h-10 inline-block mr-2"
+            />
+            Miffy Collection
           </h1>
           <p className="mt-3 text-lg text-zinc-600">
             Total items: {totalQuantity}
