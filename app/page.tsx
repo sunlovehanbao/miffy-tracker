@@ -2,7 +2,11 @@
 
 import Link from 'next/link'
 import {
-  type TouchEvent,
+  type CSSProperties,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type FormEvent,
+  type MouseEvent,
   useEffect,
   useMemo,
   useRef,
@@ -22,6 +26,29 @@ const categories: ItemCategory[] = [
 ]
 
 const stores: ItemStore[] = ['Marshalls', 'TJ Maxx', 'HomeGoods', 'Other']
+const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
+
+interface EditForm {
+  name: string
+  category: ItemCategory
+  store: ItemStore
+  quantity: string
+  notes: string
+  imageUrl: string
+  imageUrlInput: string
+  previewUrl: string
+}
+
+const emptyEditForm: EditForm = {
+  name: '',
+  category: 'Stationery',
+  store: 'Other',
+  quantity: '1',
+  notes: '',
+  imageUrl: '',
+  imageUrlInput: '',
+  previewUrl: '',
+}
 
 export default function Home() {
   const [items, setItems] = useState<Item[]>([])
@@ -30,17 +57,14 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [storeFilter, setStoreFilter] = useState('')
-  const [selectedImage, setSelectedImage] = useState<{
-    url: string
-    alt: string
-    itemId: string
-  } | null>(null)
-  const [imageZoom, setImageZoom] = useState(1)
-  const touchStartX = useRef(0)
-  const touchStartY = useRef(0)
-  const pinchStartDistance = useRef(0)
-  const pinchStartZoom = useRef(1)
-  const hasPinched = useRef(false)
+  const [editingItem, setEditingItem] = useState<Item | null>(null)
+  const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
+  const [expandedRect, setExpandedRect] = useState<DOMRect | null>(null)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isImportingImage, setIsImportingImage] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     async function loadItems() {
@@ -66,19 +90,25 @@ export default function Home() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        closeImageModal()
-      }
+      if (event.key === 'Escape') closeExpandedCard()
     }
 
-    if (selectedImage) {
-      window.addEventListener('keydown', handleKeyDown)
-    }
+    if (editingItem) window.addEventListener('keydown', handleKeyDown)
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selectedImage])
+    // closeExpandedCard reads the active form state during the key event.
+    // Rebinding the listener for every form keystroke is unnecessary here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingItem])
+
+  useEffect(() => {
+    return () => {
+      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      if (closeTimer.current) clearTimeout(closeTimer.current)
+    }
+  }, [editForm.previewUrl])
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -98,7 +128,65 @@ export default function Home() {
     [items],
   )
 
-  async function deleteItem(item: Item) {
+  function updateEditForm(fields: Partial<EditForm>) {
+    setEditForm((currentForm) => ({ ...currentForm, ...fields }))
+  }
+
+  function getFormFromItem(item: Item): EditForm {
+    return {
+      name: item.name || '',
+      category: item.category || 'Stationery',
+      store: item.store || 'Other',
+      quantity: String(item.quantity || 1),
+      notes: item.notes || '',
+      imageUrl: item.image_url || '',
+      imageUrlInput: item.image_url || '',
+      previewUrl: '',
+    }
+  }
+
+  function openExpandedCard(item: Item, target: HTMLElement) {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+
+    setError('')
+    setEditingItem(item)
+    setEditForm(getFormFromItem(item))
+    setExpandedRect(target.getBoundingClientRect())
+    setIsExpanded(false)
+    requestAnimationFrame(() => setIsExpanded(true))
+  }
+
+  function closeExpandedCard() {
+    if (!editingItem) return
+
+    setIsExpanded(false)
+    closeTimer.current = setTimeout(() => {
+      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      setEditingItem(null)
+      setEditForm(emptyEditForm)
+      setExpandedRect(null)
+      setError('')
+      setIsUploading(false)
+      setIsImportingImage(false)
+      setIsSaving(false)
+    }, 300)
+  }
+
+  function getExpandedCardStyle(): CSSProperties {
+    if (!expandedRect) return {}
+
+    return {
+      height: isExpanded ? 'min(760px, calc(100vh - 32px))' : expandedRect.height,
+      left: isExpanded ? '50%' : expandedRect.left,
+      top: isExpanded ? '50%' : expandedRect.top,
+      transform: isExpanded ? 'translate(-50%, -50%)' : 'translate(0, 0)',
+      width: isExpanded ? 'min(672px, calc(100vw - 32px))' : expandedRect.width,
+    }
+  }
+
+  async function deleteItem(item: Item, event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
     const confirmed = window.confirm(`Delete "${item.name}"?`)
     if (!confirmed) return
 
@@ -117,62 +205,137 @@ export default function Home() {
     )
   }
 
-  function closeImageModal() {
-    setSelectedImage(null)
-    setImageZoom(1)
-    pinchStartDistance.current = 0
-    hasPinched.current = false
-  }
+  async function handleImageUpload(file: File) {
+    setError('')
+    setIsUploading(true)
 
-  function getTouchDistance(touches: TouchEvent<HTMLDivElement>['touches']) {
-    if (touches.length < 2) return 0
+    try {
+      if (!allowedImageTypes.includes(file.type)) {
+        throw new Error('Please upload a JPG, PNG, or WEBP image.')
+      }
 
-    const firstTouch = touches[0]
-    const secondTouch = touches[1]
-    return Math.hypot(
-      firstTouch.clientX - secondTouch.clientX,
-      firstTouch.clientY - secondTouch.clientY,
-    )
-  }
+      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      const previewUrl = URL.createObjectURL(file)
 
-  function handleModalTouchStart(event: TouchEvent<HTMLDivElement>) {
-    if (event.touches.length === 2) {
-      pinchStartDistance.current = getTouchDistance(event.touches)
-      pinchStartZoom.current = imageZoom
-      hasPinched.current = true
-      return
+      const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const filePath = `${crypto.randomUUID()}.${extension}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('item-images')
+        .upload(filePath, file, {
+          contentType: file.type,
+          upsert: false,
+        })
+
+      if (uploadError) throw new Error(uploadError.message)
+
+      const { data } = supabase.storage
+        .from('item-images')
+        .getPublicUrl(filePath)
+
+      updateEditForm({
+        imageUrl: data.publicUrl,
+        imageUrlInput: data.publicUrl,
+        previewUrl,
+      })
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error ? uploadError.message : 'Upload failed.',
+      )
+    } finally {
+      setIsUploading(false)
     }
-
-    const touch = event.touches[0]
-    touchStartX.current = touch.clientX
-    touchStartY.current = touch.clientY
-    hasPinched.current = false
   }
 
-  function handleModalTouchMove(event: TouchEvent<HTMLDivElement>) {
-    if (event.touches.length !== 2 || pinchStartDistance.current === 0) return
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (file) handleImageUpload(file)
+    event.target.value = ''
+  }
+
+  async function importImageFromUrl(url: string) {
+    const trimmedUrl = url.trim()
+    if (!trimmedUrl || trimmedUrl === editForm.imageUrl) return
+
+    setError('')
+    setIsImportingImage(true)
+
+    try {
+      const response = await fetch('/api/fetch-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: trimmedUrl }),
+      })
+      const data = (await response.json()) as { url?: string }
+
+      if (!response.ok || !data.url) {
+        throw new Error('Could not load this image, try another URL')
+      }
+
+      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      updateEditForm({
+        imageUrl: data.url,
+        imageUrlInput: data.url,
+        previewUrl: '',
+      })
+    } catch {
+      setError('Could not load this image, try another URL')
+    } finally {
+      setIsImportingImage(false)
+    }
+  }
+
+  function handleImageUrlPaste(event: ClipboardEvent<HTMLInputElement>) {
+    const pastedUrl = event.clipboardData.getData('text').trim()
+    if (!pastedUrl) return
 
     event.preventDefault()
-    const nextDistance = getTouchDistance(event.touches)
-    const nextZoom =
-      pinchStartZoom.current * (nextDistance / pinchStartDistance.current)
-    setImageZoom(Math.min(4, Math.max(0.5, nextZoom)))
+    updateEditForm({ imageUrlInput: pastedUrl })
+    importImageFromUrl(pastedUrl)
   }
 
-  function handleModalTouchEnd(event: TouchEvent<HTMLDivElement>) {
-    if (hasPinched.current) {
-      if (event.touches.length < 2) pinchStartDistance.current = 0
+  async function handleSaveChanges(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editingItem) return
+
+    setError('')
+    setIsSaving(true)
+
+    const updatedItem: Partial<Item> = {
+      name: editForm.name.trim(),
+      category: editForm.category,
+      store: editForm.store,
+      quantity: Number(editForm.quantity) || 1,
+      notes: editForm.notes.trim() || undefined,
+      image_url: editForm.imageUrl || undefined,
+    }
+
+    const { data, error: updateError } = await supabase
+      .from('items')
+      .update({
+        ...updatedItem,
+        notes: updatedItem.notes || null,
+        image_url: updatedItem.image_url || null,
+      })
+      .eq('id', editingItem.id)
+      .select('*')
+      .single()
+
+    setIsSaving(false)
+
+    if (updateError) {
+      setError(updateError.message)
       return
     }
 
-    const touch = event.changedTouches[0]
-    const deltaX = touch.clientX - touchStartX.current
-    const deltaY = touch.clientY - touchStartY.current
-
-    if (Math.abs(deltaX) > 90 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-      closeImageModal()
-    }
+    const savedItem = data as Item
+    setItems((currentItems) =>
+      currentItems.map((item) => (item.id === savedItem.id ? savedItem : item)),
+    )
+    closeExpandedCard()
   }
+
+  const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   return (
     <main className="min-h-screen bg-white px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
@@ -183,7 +346,7 @@ export default function Home() {
             <img
               src="/miffy-logo.png"
               alt="Miffy"
-              className="w-10 h-10 inline-block mr-2"
+              className="mr-2 inline-block h-10 w-10"
             />
             Miffy Collection
           </h1>
@@ -241,7 +404,7 @@ export default function Home() {
           </div>
         </section>
 
-        {error && (
+        {error && !editingItem && (
           <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </p>
@@ -261,23 +424,10 @@ export default function Home() {
             {filteredItems.map((item) => (
               <article
                 key={item.id}
-                className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-xl active:scale-105 active:shadow-xl"
+                onClick={(event) => openExpandedCard(item, event.currentTarget)}
+                className="cursor-pointer overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-xl active:scale-105 active:shadow-xl"
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (item.image_url) {
-                      setSelectedImage({
-                        url: item.image_url,
-                        alt: item.name,
-                        itemId: item.id,
-                      })
-                      setImageZoom(1)
-                    }
-                  }}
-                  className="flex aspect-square w-full items-center justify-center bg-rose-50"
-                  aria-label={`Enlarge image for ${item.name}`}
-                >
+                <div className="flex aspect-square w-full items-center justify-center bg-rose-50">
                   {item.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -288,26 +438,18 @@ export default function Home() {
                   ) : (
                     <span className="text-6xl">🐰</span>
                   )}
-                </button>
+                </div>
 
                 <div className="space-y-3 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="text-lg font-semibold">{item.name}</h2>
-                    <div className="flex gap-2">
-                      <Link
-                        href={`/admin/edit/${item.id}`}
-                        className="flex min-h-11 items-center rounded-md border border-zinc-200 px-4 py-2 text-base font-medium text-zinc-700 hover:bg-zinc-50"
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => deleteItem(item)}
-                        className="min-h-11 rounded-md border border-red-200 px-4 py-2 text-base font-medium text-red-600 hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={(event) => deleteItem(item, event)}
+                      className="min-h-11 rounded-md border border-red-200 px-4 py-2 text-base font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -330,55 +472,204 @@ export default function Home() {
         )}
       </div>
 
-      {selectedImage && (
+      {editingItem && (
         <div
-          className="fixed inset-0 z-50 flex touch-none items-center justify-center overflow-hidden bg-zinc-950/80 p-4"
-          role="dialog"
-          aria-modal="true"
-          onClick={closeImageModal}
-          onTouchStart={handleModalTouchStart}
-          onTouchMove={handleModalTouchMove}
-          onTouchEnd={handleModalTouchEnd}
-          onWheel={(event) => {
-            event.preventDefault()
-            setImageZoom((currentZoom) => {
-              const nextZoom =
-                event.deltaY < 0 ? currentZoom + 0.15 : currentZoom - 0.15
-              return Math.min(4, Math.max(0.5, nextZoom))
-            })
-          }}
+          className={`fixed inset-0 z-50 bg-black/60 p-4 transition-opacity duration-300 ease-out ${
+            isExpanded ? 'opacity-100' : 'opacity-0'
+          }`}
+          onClick={closeExpandedCard}
         >
-          <button
-            type="button"
-            onClick={closeImageModal}
-            className="absolute right-4 top-4 flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white px-3 py-1 text-2xl font-medium text-zinc-950 shadow"
-            aria-label="Close image preview"
-          >
-            ×
-          </button>
-          <div
-            className="flex max-h-[92vh] max-w-full flex-col items-center gap-4"
+          <form
+            onSubmit={handleSaveChanges}
+            className="fixed overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl transition-all duration-300 ease-out"
+            style={getExpandedCardStyle()}
             onClick={(event) => event.stopPropagation()}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={selectedImage.url}
-              alt={selectedImage.alt}
-              className="max-h-[72vh] max-w-full rounded-lg object-contain transition-transform"
-              style={{ transform: `scale(${imageZoom})` }}
-            />
-            <div className="flex flex-col items-center gap-3 text-center">
-              <p className="text-lg font-semibold text-white">
-                {selectedImage.alt}
-              </p>
-              <Link
-                href={`/admin/edit/${selectedImage.itemId}`}
-                className="flex min-h-11 items-center rounded-md bg-white px-5 py-2 text-base font-semibold text-zinc-950 shadow hover:bg-zinc-100"
-              >
-                Edit this item
-              </Link>
+            <div className="flex h-full flex-col">
+              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Image</span>
+                  <label
+                    className="flex min-h-[220px] cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 p-4 text-center transition hover:border-zinc-400"
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    onDragEnter={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      const file = event.dataTransfer.files?.[0]
+                      if (file && allowedImageTypes.includes(file.type)) {
+                        handleImageUpload(file)
+                      }
+                    }}
+                  >
+                    <input
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={handleImageChange}
+                      type="file"
+                    />
+                    {editImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={editImageUrl}
+                        alt="Selected item preview"
+                        className="max-h-72 max-w-full rounded-md object-contain"
+                      />
+                    ) : (
+                      <div>
+                        <div className="text-5xl">🐰</div>
+                        <p className="mt-2 text-sm font-medium text-zinc-700">
+                          Click to upload an image
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          JPG, PNG, or WEBP
+                        </p>
+                      </div>
+                    )}
+                  </label>
+                  {isUploading && (
+                    <p className="text-sm text-zinc-500">Uploading image...</p>
+                  )}
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Or paste image URL</span>
+                  <div className="flex items-center gap-3">
+                    <input
+                      value={editForm.imageUrlInput}
+                      onBlur={() => importImageFromUrl(editForm.imageUrlInput)}
+                      onChange={(event) =>
+                        updateEditForm({ imageUrlInput: event.target.value })
+                      }
+                      onPaste={handleImageUrlPaste}
+                      className="min-h-11 min-w-0 flex-1 rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                      placeholder="https://..."
+                      type="url"
+                    />
+                    {editForm.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={editForm.imageUrl}
+                        alt="Imported image preview"
+                        className="h-16 w-16 rounded-md border border-zinc-200 object-cover"
+                      />
+                    )}
+                  </div>
+                  {isImportingImage && (
+                    <p className="text-sm text-zinc-500">Importing image...</p>
+                  )}
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Name</span>
+                  <input
+                    required
+                    value={editForm.name}
+                    onChange={(event) =>
+                      updateEditForm({ name: event.target.value })
+                    }
+                    className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                    type="text"
+                  />
+                </label>
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium">Category</span>
+                    <select
+                      required
+                      value={editForm.category}
+                      onChange={(event) =>
+                        updateEditForm({
+                          category: event.target.value as ItemCategory,
+                        })
+                      }
+                      className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                    >
+                      {categories.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium">Store</span>
+                    <select
+                      value={editForm.store}
+                      onChange={(event) =>
+                        updateEditForm({
+                          store: event.target.value as ItemStore,
+                        })
+                      }
+                      className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                    >
+                      {stores.map((store) => (
+                        <option key={store} value={store}>
+                          {store}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Quantity</span>
+                  <input
+                    value={editForm.quantity}
+                    onChange={(event) =>
+                      updateEditForm({ quantity: event.target.value })
+                    }
+                    className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                    min="1"
+                    type="number"
+                  />
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Notes</span>
+                  <textarea
+                    value={editForm.notes}
+                    onChange={(event) =>
+                      updateEditForm({ notes: event.target.value })
+                    }
+                    className="min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                  />
+                </label>
+
+                {error && (
+                  <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 border-t border-zinc-200 bg-white p-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeExpandedCard}
+                  className="min-h-[50px] rounded-md border border-zinc-300 px-5 py-3 text-base font-semibold text-zinc-700 hover:bg-zinc-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving || isUploading || isImportingImage}
+                  className="min-h-[50px] rounded-md bg-zinc-950 px-5 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
+                >
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
