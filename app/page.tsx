@@ -173,7 +173,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#fbfdff] px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-white px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <header>
           <h1 className="flex items-center text-4xl font-semibold sm:text-5xl">
