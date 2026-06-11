@@ -198,72 +198,6 @@ export default function EditItemPage() {
         <h1 className="text-3xl font-semibold">Edit Item</h1>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-          <label className="block space-y-2">
-            <span className="text-sm font-medium">Name</span>
-            <input
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
-              type="text"
-            />
-          </label>
-
-          <div className="grid gap-6 sm:grid-cols-2">
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Category</span>
-              <select
-                required
-                value={category}
-                onChange={(event) =>
-                  setCategory(event.target.value as ItemCategory)
-                }
-                className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
-              >
-                {categories.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Store</span>
-              <select
-                value={store}
-                onChange={(event) => setStore(event.target.value as ItemStore)}
-                className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
-              >
-                {stores.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <label className="block space-y-2">
-            <span className="text-sm font-medium">Quantity</span>
-            <input
-              value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
-              className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
-              min="1"
-              type="number"
-            />
-          </label>
-
-          <label className="block space-y-2">
-            <span className="text-sm font-medium">Notes</span>
-            <textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              className="min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
-            />
-          </label>
-
           <div className="space-y-2">
             <span className="text-sm font-medium">Image</span>
             <label
@@ -343,6 +277,72 @@ export default function EditItemPage() {
             {isImportingImage && (
               <p className="text-sm text-zinc-500">Importing image...</p>
             )}
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium">Name</span>
+            <input
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+              type="text"
+            />
+          </label>
+
+          <div className="grid gap-6 sm:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Category</span>
+              <select
+                required
+                value={category}
+                onChange={(event) =>
+                  setCategory(event.target.value as ItemCategory)
+                }
+                className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+              >
+                {categories.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Store</span>
+              <select
+                value={store}
+                onChange={(event) => setStore(event.target.value as ItemStore)}
+                className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+              >
+                {stores.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium">Quantity</span>
+            <input
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+              min="1"
+              type="number"
+            />
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium">Notes</span>
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              className="min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+            />
           </label>
 
           {error && (

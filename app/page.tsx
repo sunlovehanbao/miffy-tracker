@@ -33,6 +33,7 @@ export default function Home() {
   const [selectedImage, setSelectedImage] = useState<{
     url: string
     alt: string
+    itemId: string
   } | null>(null)
   const [imageZoom, setImageZoom] = useState(1)
   const touchStartX = useRef(0)
@@ -153,7 +154,8 @@ export default function Home() {
 
     event.preventDefault()
     const nextDistance = getTouchDistance(event.touches)
-    const nextZoom = pinchStartZoom.current * (nextDistance / pinchStartDistance.current)
+    const nextZoom =
+      pinchStartZoom.current * (nextDistance / pinchStartDistance.current)
     setImageZoom(Math.min(4, Math.max(0.5, nextZoom)))
   }
 
@@ -259,7 +261,7 @@ export default function Home() {
             {filteredItems.map((item) => (
               <article
                 key={item.id}
-                className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"
+                className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-xl active:scale-105 active:shadow-xl"
               >
                 <button
                   type="button"
@@ -268,6 +270,7 @@ export default function Home() {
                       setSelectedImage({
                         url: item.image_url,
                         alt: item.name,
+                        itemId: item.id,
                       })
                       setImageZoom(1)
                     }
@@ -353,14 +356,29 @@ export default function Home() {
           >
             ×
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={selectedImage.url}
-            alt={selectedImage.alt}
-            className="max-h-[90vh] max-w-full rounded-lg object-contain transition-transform"
-            style={{ transform: `scale(${imageZoom})` }}
+          <div
+            className="flex max-h-[92vh] max-w-full flex-col items-center gap-4"
             onClick={(event) => event.stopPropagation()}
-          />
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={selectedImage.url}
+              alt={selectedImage.alt}
+              className="max-h-[72vh] max-w-full rounded-lg object-contain transition-transform"
+              style={{ transform: `scale(${imageZoom})` }}
+            />
+            <div className="flex flex-col items-center gap-3 text-center">
+              <p className="text-lg font-semibold text-white">
+                {selectedImage.alt}
+              </p>
+              <Link
+                href={`/admin/edit/${selectedImage.itemId}`}
+                className="flex min-h-11 items-center rounded-md bg-white px-5 py-2 text-base font-semibold text-zinc-950 shadow hover:bg-zinc-100"
+              >
+                Edit this item
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 
