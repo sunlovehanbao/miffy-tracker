@@ -98,8 +98,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-    // closeExpandedCard reads the active form state during the key event.
-    // Rebinding the listener for every form keystroke is unnecessary here.
+    // closeExpandedCard reads the active form state when Escape is pressed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingItem])
 
@@ -127,6 +126,8 @@ export default function Home() {
     () => items.reduce((total, item) => total + (item.quantity || 1), 0),
     [items],
   )
+
+  const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   function updateEditForm(fields: Partial<EditForm>) {
     setEditForm((currentForm) => ({ ...currentForm, ...fields }))
@@ -177,11 +178,15 @@ export default function Home() {
     if (!expandedRect) return {}
 
     return {
-      height: isExpanded ? 'min(760px, calc(100vh - 32px))' : expandedRect.height,
+      height: isExpanded
+        ? 'min(600px, calc(100vh - 32px))'
+        : expandedRect.height,
       left: isExpanded ? '50%' : expandedRect.left,
       top: isExpanded ? '50%' : expandedRect.top,
       transform: isExpanded ? 'translate(-50%, -50%)' : 'translate(0, 0)',
-      width: isExpanded ? 'min(672px, calc(100vw - 32px))' : expandedRect.width,
+      width: isExpanded
+        ? 'min(360px, calc(100vw - 32px))'
+        : expandedRect.width,
     }
   }
 
@@ -335,8 +340,6 @@ export default function Home() {
     closeExpandedCard()
   }
 
-  const editImageUrl = editForm.previewUrl || editForm.imageUrl
-
   return (
     <main className="min-h-screen bg-white px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
@@ -420,50 +423,53 @@ export default function Home() {
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
-          <section className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <section className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {filteredItems.map((item) => (
               <article
                 key={item.id}
                 onClick={(event) => openExpandedCard(item, event.currentTarget)}
-                className="cursor-pointer overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-xl active:scale-105 active:shadow-xl"
+                className="group relative z-0 aspect-[2/3] cursor-pointer transition-all duration-200 ease-in-out hover:z-20 hover:scale-105 active:z-20 active:scale-105"
               >
-                <div className="flex aspect-square w-full items-center justify-center bg-rose-50">
-                  {item.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.image_url}
-                      alt={item.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-6xl">🐰</span>
-                  )}
-                </div>
-
-                <div className="space-y-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-lg font-semibold">{item.name}</h2>
-                    <button
-                      type="button"
-                      onClick={(event) => deleteItem(item, event)}
-                      className="min-h-11 rounded-md border border-red-200 px-4 py-2 text-base font-medium text-red-600 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
+                <div className="absolute inset-0 translate-x-4 translate-y-4 rotate-3 rounded-[16px] border-2 border-[#FFD6E0] bg-[#fff7fa]" />
+                <div className="absolute inset-0 translate-x-2 translate-y-2 rotate-1 rounded-[16px] border-2 border-[#FFD6E0] bg-white" />
+                <div className="relative z-10 flex h-full flex-col overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white shadow-[0_12px_30px_rgba(255,214,224,0.45)] transition-all duration-200 ease-in-out group-hover:shadow-[0_24px_60px_rgba(255,150,180,0.55)] group-active:shadow-[0_24px_60px_rgba(255,150,180,0.55)]">
+                  <div className="flex min-h-0 flex-[3] items-center justify-center bg-rose-50">
+                    {item.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-6xl">🐰</span>
+                    )}
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200">
-                      {item.category}
-                    </span>
-                    {item.store && (
-                      <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-inset ring-rose-200">
-                        {item.store}
+                  <div className="flex flex-[2] flex-col justify-between border-t-2 border-[#FFD6E0] p-4">
+                    <div>
+                      <h2 className="line-clamp-2 text-lg font-semibold">
+                        {item.name}
+                      </h2>
+                      <p className="mt-2 text-sm text-zinc-500">
+                        {item.category}
+                      </p>
+                      {item.store && (
+                        <p className="text-sm text-zinc-500">{item.store}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-zinc-600">
+                        Qty {item.quantity}
                       </span>
-                    )}
-                    <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700 ring-1 ring-inset ring-zinc-200">
-                      Qty {item.quantity}
-                    </span>
+                      <button
+                        type="button"
+                        onClick={(event) => deleteItem(item, event)}
+                        className="min-h-11 rounded-md border border-red-200 px-4 py-2 text-base font-medium text-red-600 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               </article>
@@ -481,192 +487,162 @@ export default function Home() {
         >
           <form
             onSubmit={handleSaveChanges}
-            className="fixed overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl transition-all duration-300 ease-out"
+            className="fixed overflow-hidden rounded-[20px] border-[3px] border-[#FFD6E0] bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
             style={getExpandedCardStyle()}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex h-full flex-col">
-              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
-                <div className="space-y-2">
-                  <span className="text-sm font-medium">Image</span>
-                  <label
-                    className="flex min-h-[220px] cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 p-4 text-center transition hover:border-zinc-400"
-                    onDragOver={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                    }}
-                    onDragEnter={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      const file = event.dataTransfer.files?.[0]
-                      if (file && allowedImageTypes.includes(file.type)) {
-                        handleImageUpload(file)
-                      }
-                    }}
-                  >
-                    <input
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={handleImageChange}
-                      type="file"
+              <div className="relative basis-[60%] border-b border-[#FFD6E0] bg-rose-50">
+                <label
+                  className="flex h-full cursor-pointer items-center justify-center overflow-hidden"
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onDragEnter={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    const file = event.dataTransfer.files?.[0]
+                    if (file && allowedImageTypes.includes(file.type)) {
+                      handleImageUpload(file)
+                    }
+                  }}
+                >
+                  <input
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleImageChange}
+                    type="file"
+                  />
+                  {editImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={editImageUrl}
+                      alt="Selected item preview"
+                      className="h-full w-full object-cover"
                     />
-                    {editImageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={editImageUrl}
-                        alt="Selected item preview"
-                        className="max-h-72 max-w-full rounded-md object-contain"
-                      />
-                    ) : (
-                      <div>
-                        <div className="text-5xl">🐰</div>
-                        <p className="mt-2 text-sm font-medium text-zinc-700">
-                          Click to upload an image
-                        </p>
-                        <p className="mt-1 text-xs text-zinc-500">
-                          JPG, PNG, or WEBP
-                        </p>
-                      </div>
-                    )}
-                  </label>
-                  {isUploading && (
-                    <p className="text-sm text-zinc-500">Uploading image...</p>
-                  )}
-                </div>
-
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Or paste image URL</span>
-                  <div className="flex items-center gap-3">
-                    <input
-                      value={editForm.imageUrlInput}
-                      onBlur={() => importImageFromUrl(editForm.imageUrlInput)}
-                      onChange={(event) =>
-                        updateEditForm({ imageUrlInput: event.target.value })
-                      }
-                      onPaste={handleImageUrlPaste}
-                      className="min-h-11 min-w-0 flex-1 rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
-                      placeholder="https://..."
-                      type="url"
-                    />
-                    {editForm.imageUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={editForm.imageUrl}
-                        alt="Imported image preview"
-                        className="h-16 w-16 rounded-md border border-zinc-200 object-cover"
-                      />
-                    )}
-                  </div>
-                  {isImportingImage && (
-                    <p className="text-sm text-zinc-500">Importing image...</p>
+                  ) : (
+                    <div className="text-center">
+                      <div className="text-5xl">🐰</div>
+                      <p className="mt-2 text-sm font-medium text-zinc-700">
+                        Click to upload an image
+                      </p>
+                    </div>
                   )}
                 </label>
 
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Name</span>
+                <div className="absolute inset-x-3 bottom-3 rounded-md bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
+                  <input
+                    value={editForm.imageUrlInput}
+                    onBlur={() => importImageFromUrl(editForm.imageUrlInput)}
+                    onChange={(event) =>
+                      updateEditForm({ imageUrlInput: event.target.value })
+                    }
+                    onPaste={handleImageUrlPaste}
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    placeholder="Paste image URL"
+                    type="url"
+                  />
+                  {(isUploading || isImportingImage) && (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {isUploading ? 'Uploading image...' : 'Importing image...'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex min-h-0 basis-[40%] flex-col bg-white">
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
                   <input
                     required
                     value={editForm.name}
                     onChange={(event) =>
                       updateEditForm({ name: event.target.value })
                     }
-                    className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
+                    placeholder="Name"
                     type="text"
                   />
-                </label>
 
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <label className="space-y-2">
-                    <span className="text-sm font-medium">Category</span>
-                    <select
-                      required
-                      value={editForm.category}
-                      onChange={(event) =>
-                        updateEditForm({
-                          category: event.target.value as ItemCategory,
-                        })
-                      }
-                      className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
-                    >
-                      {categories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <select
+                    required
+                    value={editForm.category}
+                    onChange={(event) =>
+                      updateEditForm({
+                        category: event.target.value as ItemCategory,
+                      })
+                    }
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                  >
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-medium">Store</span>
-                    <select
-                      value={editForm.store}
-                      onChange={(event) =>
-                        updateEditForm({
-                          store: event.target.value as ItemStore,
-                        })
-                      }
-                      className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
-                    >
-                      {stores.map((store) => (
-                        <option key={store} value={store}>
-                          {store}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
+                  <select
+                    value={editForm.store}
+                    onChange={(event) =>
+                      updateEditForm({ store: event.target.value as ItemStore })
+                    }
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                  >
+                    {stores.map((store) => (
+                      <option key={store} value={store}>
+                        {store}
+                      </option>
+                    ))}
+                  </select>
 
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Quantity</span>
                   <input
                     value={editForm.quantity}
                     onChange={(event) =>
                       updateEditForm({ quantity: event.target.value })
                     }
-                    className="min-h-11 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
                     min="1"
+                    placeholder="Quantity"
                     type="number"
                   />
-                </label>
 
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Notes</span>
                   <textarea
                     value={editForm.notes}
                     onChange={(event) =>
                       updateEditForm({ notes: event.target.value })
                     }
-                    className="min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus:border-zinc-950"
+                    className="h-14 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    placeholder="Notes"
                   />
-                </label>
 
-                {error && (
-                  <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error}
-                  </p>
-                )}
-              </div>
+                  {error && (
+                    <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                      {error}
+                    </p>
+                  )}
+                </div>
 
-              <div className="flex flex-col-reverse gap-3 border-t border-zinc-200 bg-white p-4 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={closeExpandedCard}
-                  className="min-h-[50px] rounded-md border border-zinc-300 px-5 py-3 text-base font-semibold text-zinc-700 hover:bg-zinc-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving || isUploading || isImportingImage}
-                  className="min-h-[50px] rounded-md bg-zinc-950 px-5 py-3 text-base font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-400"
-                >
-                  {isSaving ? 'Saving...' : 'Save Changes'}
-                </button>
+                <div className="grid grid-cols-2 gap-3 border-t border-[#FFD6E0] px-5 py-3">
+                  <button
+                    type="submit"
+                    disabled={isSaving || isUploading || isImportingImage}
+                    className="min-h-11 rounded-md bg-[#FF8FB3] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+                  >
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeExpandedCard}
+                    className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </form>
