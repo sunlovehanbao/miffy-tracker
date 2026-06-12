@@ -6,7 +6,6 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type FormEvent,
-  type MouseEvent,
   useEffect,
   useMemo,
   useRef,
@@ -183,26 +182,6 @@ export default function Home() {
         ? 'min(360px, calc(100vw - 32px))'
         : expandedRect.width,
     }
-  }
-
-  async function deleteItem(item: Item, event: MouseEvent<HTMLButtonElement>) {
-    event.stopPropagation()
-    const confirmed = window.confirm(`Delete "${item.name}"?`)
-    if (!confirmed) return
-
-    const { error: deleteError } = await supabase
-      .from('items')
-      .delete()
-      .eq('id', item.id)
-
-    if (deleteError) {
-      setError(deleteError.message)
-      return
-    }
-
-    setItems((currentItems) =>
-      currentItems.filter((currentItem) => currentItem.id !== item.id),
-    )
   }
 
   async function handleImageUpload(file: File) {
@@ -403,17 +382,21 @@ export default function Home() {
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
-          <section className="mt-8 grid grid-cols-1 gap-8">
+          <section className="mt-6 flex flex-col items-center gap-4">
             {filteredItems.map((item) => (
               <article
                 key={item.id}
                 onClick={(event) => openExpandedCard(item, event.currentTarget)}
-                className="group relative z-0 aspect-[2/3] cursor-pointer transition-all duration-200 ease-in-out hover:z-20 hover:scale-105 active:z-20 active:scale-105"
+                className="group h-[510px] w-[340px] cursor-pointer rounded-[12px] border-[3px] border-[#FFB7C5] bg-white p-[5px] shadow-[0_4px_12px_rgba(255,183,197,0.4)] transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-[0_12px_30px_rgba(255,183,197,0.6)] active:scale-105 active:shadow-[0_12px_30px_rgba(255,183,197,0.6)]"
               >
-                <div className="absolute inset-0 translate-x-4 translate-y-4 rotate-3 rounded-[16px] border-2 border-[#FFD6E0] bg-[#fff7fa]" />
-                <div className="absolute inset-0 translate-x-2 translate-y-2 rotate-1 rounded-[16px] border-2 border-[#FFD6E0] bg-white" />
-                <div className="relative z-10 flex h-full flex-col overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white shadow-[0_12px_30px_rgba(255,214,224,0.45)] transition-all duration-200 ease-in-out group-hover:shadow-[0_24px_60px_rgba(255,150,180,0.55)] group-active:shadow-[0_24px_60px_rgba(255,150,180,0.55)]">
-                  <div className="flex min-h-0 flex-[3] items-center justify-center bg-rose-50">
+                <div className="flex h-full flex-col overflow-hidden rounded-[8px] border border-[#FFD6E0] bg-white">
+                  <div className="flex h-14 shrink-0 items-center justify-center px-4 text-center">
+                    <h2 className="line-clamp-2 text-lg font-semibold leading-tight text-[#FF8FA8]">
+                      {item.name}
+                    </h2>
+                  </div>
+
+                  <div className="mx-3 flex min-h-0 flex-[3] items-center justify-center overflow-hidden rounded-md border border-[#FFD6E0] bg-rose-50">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -426,29 +409,16 @@ export default function Home() {
                     )}
                   </div>
 
-                  <div className="flex flex-[2] flex-col justify-between border-t-2 border-[#FFD6E0] p-4">
-                    <div>
-                      <h2 className="line-clamp-2 text-lg font-semibold">
-                        {item.name}
-                      </h2>
-                      <p className="mt-2 text-sm text-zinc-500">
-                        {item.category}
-                      </p>
-                      {item.store && (
-                        <p className="text-sm text-zinc-500">{item.store}</p>
+                  <div className="mt-3 flex flex-[2] flex-col items-center justify-center gap-3 border-t border-[#FFD6E0] bg-[#FFF0F3] p-4 text-center">
+                    <p className="text-base font-semibold text-[#FF8FA8]">
+                      Qty {item.quantity}
+                    </p>
+                    <div className="max-h-24 overflow-hidden text-sm leading-6 text-zinc-600">
+                      {item.notes ? (
+                        <p className="line-clamp-4">{item.notes}</p>
+                      ) : (
+                        <p className="text-zinc-400">No notes</p>
                       )}
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-zinc-600">
-                        Qty {item.quantity}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(event) => deleteItem(item, event)}
-                        className="min-h-11 rounded-md border border-red-200 px-4 py-2 text-base font-medium text-red-600 hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
                     </div>
                   </div>
                 </div>
