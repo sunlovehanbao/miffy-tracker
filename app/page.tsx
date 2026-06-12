@@ -24,7 +24,6 @@ const categories: ItemCategory[] = [
   'Other',
 ]
 
-const stores: ItemStore[] = ['Marshalls', 'TJ Maxx', 'HomeGoods', 'Other']
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 
 interface EditForm {
@@ -308,33 +307,40 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
-      {!editingItem && (
-        <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
-          {error && (
-            <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </p>
-          )}
+      <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
+        {error && (
+          <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </p>
+        )}
 
-          {isLoading ? (
-            <p className="mt-10 text-center text-sm text-zinc-500">
-              Loading collection...
-            </p>
-          ) : items.length === 0 ? (
-            <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
-              <div className="text-5xl">馃惏</div>
-              <p className="mt-4 text-lg font-medium">No items found</p>
-            </div>
-          ) : (
-            <section
-              className="relative h-[650px] overflow-hidden"
-              onTouchStart={handleFanTouchStart}
-              onTouchEnd={handleFanTouchEnd}
-            >
-              {items.map((item, index) => (
+        {isLoading ? (
+          <p className="mt-10 text-center text-sm text-zinc-500">
+            Loading collection...
+          </p>
+        ) : items.length === 0 ? (
+          <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
+            <div className="text-5xl">馃惏</div>
+            <p className="mt-4 text-lg font-medium">No items found</p>
+          </div>
+        ) : (
+          <section
+            className={`relative overflow-hidden transition-all duration-300 ease-out ${
+              editingItem ? 'h-[820px]' : 'h-[650px]'
+            }`}
+            onTouchStart={editingItem ? undefined : handleFanTouchStart}
+            onTouchEnd={editingItem ? undefined : handleFanTouchEnd}
+          >
+            {items.map((item, index) => {
+              const isEditingThisItem = editingItem?.id === item.id
+              const isDimmed = Boolean(editingItem && !isEditingThisItem)
+
+              return (
                 <article
                   key={item.id}
                   onClick={() => {
+                    if (editingItem) return
+
                     if (index !== activeSelectedIndex) {
                       setSelectedIndex(index)
                       return
@@ -342,218 +348,183 @@ export default function Home() {
 
                     openEditor(item)
                   }}
-                  className="group absolute bottom-8 left-1/2 h-[460px] w-[300px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
-                  style={getFanCardStyle(index)}
+                  className={`group absolute bottom-8 left-1/2 cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)] ${
+                    isEditingThisItem
+                      ? 'h-[700px] w-[340px]'
+                      : 'h-[460px] w-[300px]'
+                  }`}
+                  style={{
+                    ...getFanCardStyle(index),
+                    opacity: isDimmed ? 0.3 : 1,
+                    pointerEvents: isDimmed ? 'none' : 'auto',
+                  }}
                 >
-                  <div className="flex h-full flex-col justify-between gap-3 bg-white">
-                    <div className="flex h-[275px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
-                      {item.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={item.image_url}
-                          alt={item.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-6xl">馃惏</span>
-                      )}
-                    </div>
-
-                    <div className="min-h-[80px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
-                      <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
-                        {item.name}
-                      </h2>
-                      <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
-                        <span>Qty {item.quantity}</span>
-                        <span className="truncate">{item.category}</span>
-                      </div>
-                      <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
-                        {item.notes ? (
-                          <p className="line-clamp-4">{item.notes}</p>
-                        ) : (
-                          <p className="text-zinc-400">No notes</p>
+                  {isEditingThisItem ? (
+                    <form
+                      onSubmit={handleSaveChanges}
+                      onClick={(event) => event.stopPropagation()}
+                      className="flex h-full flex-col gap-3 bg-white"
+                    >
+                      <div className="relative flex h-[330px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                        <label
+                          className="flex h-full w-full cursor-pointer items-center justify-center overflow-hidden"
+                          onDragOver={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                          }}
+                          onDragEnter={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            const file = event.dataTransfer.files?.[0]
+                            if (file && allowedImageTypes.includes(file.type)) {
+                              handleImageUpload(file)
+                            }
+                          }}
+                        >
+                          <input
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={handleImageChange}
+                            type="file"
+                          />
+                          {editImageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={editImageUrl}
+                              alt="Selected item preview"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="text-center">
+                              <div className="text-5xl">馃惏</div>
+                              <p className="mt-2 text-sm font-medium text-zinc-700">
+                                Click to upload an image
+                              </p>
+                            </div>
+                          )}
+                        </label>
+                        {(isUploading || isImportingImage) && (
+                          <p className="absolute bottom-3 rounded-md bg-white/90 px-3 py-1 text-xs text-zinc-500 shadow-sm">
+                            {isUploading
+                              ? 'Uploading image...'
+                              : 'Importing image...'}
+                          </p>
                         )}
                       </div>
+
+                      <div className="flex min-h-0 flex-1 flex-col rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7]">
+                        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+                          <input
+                            required
+                            value={editForm.name}
+                            onChange={(event) =>
+                              updateEditForm({ name: event.target.value })
+                            }
+                            className="min-h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
+                            placeholder="Name"
+                            type="text"
+                          />
+
+                          <select
+                            required
+                            value={editForm.category}
+                            onChange={(event) =>
+                              updateEditForm({
+                                category: event.target.value as ItemCategory,
+                              })
+                            }
+                            className="min-h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                          >
+                            {categories.map((category) => (
+                              <option key={category} value={category}>
+                                {category}
+                              </option>
+                            ))}
+                          </select>
+
+                          <input
+                            value={editForm.quantity}
+                            onChange={(event) =>
+                              updateEditForm({ quantity: event.target.value })
+                            }
+                            className="min-h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                            min="1"
+                            placeholder="Quantity"
+                            type="number"
+                          />
+
+                          <textarea
+                            value={editForm.notes}
+                            onChange={(event) =>
+                              updateEditForm({ notes: event.target.value })
+                            }
+                            className="min-h-20 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                            placeholder="Notes"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 border-t border-[#FFD6E0] bg-white/80 px-4 py-3">
+                          <button
+                            type="submit"
+                            disabled={isSaving || isUploading || isImportingImage}
+                            className="min-h-11 rounded-md bg-[#FF8FB3] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+                          >
+                            {isSaving ? 'Saving...' : 'Save Changes'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={closeEditor}
+                            className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex h-full flex-col justify-between gap-3 bg-white">
+                      <div className="flex h-[275px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                        {item.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.image_url}
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-6xl">馃惏</span>
+                        )}
+                      </div>
+
+                      <div className="min-h-[80px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
+                        <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
+                          {item.name}
+                        </h2>
+                        <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
+                          <span>Qty {item.quantity}</span>
+                          <span className="truncate">{item.category}</span>
+                        </div>
+                        <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
+                          {item.notes ? (
+                            <p className="line-clamp-4">{item.notes}</p>
+                          ) : (
+                            <p className="text-zinc-400">No notes</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </article>
-              ))}
+              )
+            })}
             </section>
           )}
         </div>
-      )}
-
-      {editingItem && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 9999,
-            backgroundColor: 'white',
-            overflowY: 'auto',
-          }}
-        >
-          <form onSubmit={handleSaveChanges}>
-            <div className="mx-auto flex min-h-screen w-full max-w-[390px] flex-col bg-white">
-              <div className="relative border-b border-[#FFD6E0] bg-rose-50">
-                <label
-                  className="flex min-h-[340px] cursor-pointer items-center justify-center overflow-hidden"
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                  }}
-                  onDragEnter={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    const file = event.dataTransfer.files?.[0]
-                    if (file && allowedImageTypes.includes(file.type)) {
-                      handleImageUpload(file)
-                    }
-                  }}
-                >
-                  <input
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={handleImageChange}
-                    type="file"
-                  />
-                  {editImageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={editImageUrl}
-                      alt="Selected item preview"
-                      className="h-full min-h-[340px] w-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-center">
-                      <div className="text-5xl">馃惏</div>
-                      <p className="mt-2 text-sm font-medium text-zinc-700">
-                        Click to upload an image
-                      </p>
-                    </div>
-                  )}
-                </label>
-
-                <div className="absolute inset-x-3 bottom-3 rounded-md bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
-                  <input
-                    value={editForm.imageUrlInput}
-                    onBlur={() => importImageFromUrl(editForm.imageUrlInput)}
-                    onChange={(event) =>
-                      updateEditForm({ imageUrlInput: event.target.value })
-                    }
-                    onPaste={handleImageUrlPaste}
-                    className="h-9 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
-                    placeholder="Paste image URL"
-                    type="url"
-                  />
-                  {(isUploading || isImportingImage) && (
-                    <p className="mt-1 text-xs text-zinc-500">
-                      {isUploading ? 'Uploading image...' : 'Importing image...'}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-1 flex-col bg-white">
-                <div className="flex-1 space-y-4 px-5 py-5">
-                  <input
-                    required
-                    value={editForm.name}
-                    onChange={(event) =>
-                      updateEditForm({ name: event.target.value })
-                    }
-                    className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
-                    placeholder="Name"
-                    type="text"
-                  />
-
-                  <select
-                    required
-                    value={editForm.category}
-                    onChange={(event) =>
-                      updateEditForm({
-                        category: event.target.value as ItemCategory,
-                      })
-                    }
-                    className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
-                  >
-                    {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={editForm.store}
-                    onChange={(event) =>
-                      updateEditForm({ store: event.target.value as ItemStore })
-                    }
-                    className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
-                  >
-                    {stores.map((store) => (
-                      <option key={store} value={store}>
-                        {store}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    value={editForm.quantity}
-                    onChange={(event) =>
-                      updateEditForm({ quantity: event.target.value })
-                    }
-                    className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
-                    min="1"
-                    placeholder="Quantity"
-                    type="number"
-                  />
-
-                  <textarea
-                    value={editForm.notes}
-                    onChange={(event) =>
-                      updateEditForm({ notes: event.target.value })
-                    }
-                    className="min-h-28 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
-                    placeholder="Notes"
-                  />
-
-                  {error && (
-                    <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                      {error}
-                    </p>
-                  )}
-                </div>
-
-                <div className="sticky bottom-0 grid grid-cols-2 gap-3 border-t border-[#FFD6E0] bg-white px-5 py-4">
-                  <button
-                    type="submit"
-                    disabled={isSaving || isUploading || isImportingImage}
-                    className="min-h-12 rounded-md bg-[#FF8FB3] px-4 py-2 text-base font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
-                  >
-                    {isSaving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeEditor}
-                    className="min-h-12 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-base font-semibold text-zinc-700 hover:bg-rose-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-              </div>
-          </form>
-        </div>
-      )}
 
       {!editingItem && (
         <Link
