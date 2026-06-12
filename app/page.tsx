@@ -122,11 +122,6 @@ export default function Home() {
     })
   }, [categoryFilter, items, search, storeFilter])
 
-  const totalQuantity = useMemo(
-    () => items.reduce((total, item) => total + (item.quantity || 1), 0),
-    [items],
-  )
-
   const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   function updateEditForm(fields: Partial<EditForm>) {
@@ -341,25 +336,10 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-white px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header>
-          <h1 className="flex items-center text-4xl font-semibold sm:text-5xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/miffy-logo.png"
-              alt="Miffy"
-              className="mr-2 inline-block h-10 w-10"
-            />
-            Miffy Collection
-          </h1>
-          <p className="mt-3 text-lg text-zinc-600">
-            Total items: {totalQuantity}
-          </p>
-        </header>
-
-        <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row">
+    <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
+      <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
+        <section className="rounded-lg border border-zinc-200 bg-white p-4">
+          <div className="flex w-full flex-col gap-4">
             <label className="w-full flex-1 space-y-2">
               <span className="text-sm font-medium text-zinc-700">Search</span>
               <input
@@ -423,7 +403,7 @@ export default function Home() {
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
-          <section className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          <section className="mt-8 grid grid-cols-1 gap-8">
             {filteredItems.map((item) => (
               <article
                 key={item.id}
