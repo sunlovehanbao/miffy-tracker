@@ -120,7 +120,7 @@ export default function Home() {
     return {
       opacity: isVisible ? 1 : 0,
       pointerEvents: isVisible ? 'auto' : 'none',
-      transform: `translateX(calc(-50% + ${relativeIndex * 325}px))`,
+      transform: `translateX(calc(-50% + ${relativeIndex * 312}px))`,
       zIndex: 20 - Math.abs(relativeIndex),
     }
   }
@@ -254,17 +254,20 @@ export default function Home() {
               const isActive = index === activeCardIndex
               const isExpanded = expandedId === item.id
               const isSideCard = Math.abs(index - activeCardIndex) === 1
-              const sideCardDimmed = Boolean(expandedId && !isExpanded)
 
               return (
                 <article
                   key={item.id}
-                  className={`absolute left-1/2 top-6 w-[340px] overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[transform,opacity,min-height,box-shadow] duration-300 ease-out ${
+                  className={`absolute left-1/2 top-6 w-[300px] overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[transform,opacity,min-height,box-shadow] duration-300 ease-out ${
                     isActive ? 'cursor-pointer' : 'cursor-pointer'
                   } ${isExpanded ? 'min-h-[700px]' : 'min-h-[460px]'}`}
                   style={{
                     ...getCardStyle(index),
-                    opacity: sideCardDimmed ? 0.4 : getCardStyle(index).opacity,
+                    opacity: isExpanded
+                      ? 1
+                      : isSideCard
+                        ? 0.6
+                        : getCardStyle(index).opacity,
                   }}
                   onClick={() => {
                     if (expandedId) return
@@ -410,7 +413,6 @@ export default function Home() {
                       </div>
                     </div>
                   )}
-                  {isSideCard && <span className="sr-only">Side card</span>}
                 </article>
               )
             })}
