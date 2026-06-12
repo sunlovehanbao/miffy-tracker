@@ -157,15 +157,13 @@ export default function Home() {
 
   function getCarouselCardStyle(index: number): CSSProperties {
     const relativeIndex = index - activeSelectedIndex
-    const distance = Math.abs(relativeIndex)
-    const offsetX = relativeIndex * 325
-    const scale = relativeIndex === 0 ? 1 : 0.96
+    const isSelected = relativeIndex === 0
 
     return {
-      opacity: distance > 1 ? 0 : 1,
-      pointerEvents: distance > 1 ? 'none' : 'auto',
-      transform: `translateX(calc(-50% + ${offsetX}px)) scale(${scale})`,
-      zIndex: 100 - distance,
+      opacity: isSelected ? 1 : 0,
+      pointerEvents: isSelected ? 'auto' : 'none',
+      transform: 'translate(-50%, -50%)',
+      zIndex: isSelected ? 100 : 0,
     }
   }
 
@@ -345,7 +343,7 @@ export default function Home() {
           </div>
         ) : (
           <section
-            className="relative h-[640px] overflow-hidden"
+            className="relative flex min-h-[calc(100vh-40px)] items-center justify-center overflow-hidden"
             onTouchStart={handleCarouselTouchStart}
             onTouchEnd={handleCarouselTouchEnd}
           >
@@ -360,11 +358,11 @@ export default function Home() {
 
                   openExpandedCard(item, event.currentTarget)
                 }}
-                className="group absolute bottom-12 left-1/2 h-[520px] w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
+                className="group absolute left-1/2 top-1/2 h-[580px] w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
                 style={getCarouselCardStyle(index)}
               >
                 <div className="flex h-full flex-col justify-between gap-3 bg-white">
-                  <div className="flex h-[300px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                  <div className="flex h-[360px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
