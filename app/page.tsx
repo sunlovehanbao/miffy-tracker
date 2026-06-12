@@ -321,10 +321,10 @@ export default function Home() {
               <article
                 key={item.id}
                 onClick={(event) => openExpandedCard(item, event.currentTarget)}
-                className="group w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:scale-105 active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
+                className="group h-[520px] w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:scale-105 active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
               >
                 <div className="flex flex-col gap-3 bg-white">
-                  <div className="flex h-[240px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                  <div className="flex h-[320px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -337,7 +337,7 @@ export default function Home() {
                     )}
                   </div>
 
-                  <div className="rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
+                  <div className="min-h-[120px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
                     <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
                       {item.name}
                     </h2>
