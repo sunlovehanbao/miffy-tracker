@@ -6,8 +6,9 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type FormEvent,
-  type TouchEvent,
+  type MouseEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -24,6 +25,7 @@ const categories: ItemCategory[] = [
   'Other',
 ]
 
+const stores: ItemStore[] = ['Marshalls', 'TJ Maxx', 'HomeGoods', 'Other']
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 
 interface EditForm {
@@ -52,13 +54,17 @@ export default function Home() {
   const [items, setItems] = useState<Item[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [storeFilter, setStoreFilter] = useState('')
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
+  const [expandedRect, setExpandedRect] = useState<DOMRect | null>(null)
+  const [isExpanded, setIsExpanded] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isImportingImage, setIsImportingImage] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [selectedIndex, setSelectedIndex] = useState(0)
-  const touchStartX = useRef(0)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     async function loadItems() {
@@ -99,11 +105,28 @@ export default function Home() {
   useEffect(() => {
     return () => {
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      if (closeTimer.current) clearTimeout(closeTimer.current)
     }
   }, [editForm.previewUrl])
 
-  const activeSelectedIndex =
-    items.length > 0 ? Math.min(selectedIndex, items.length - 1) : 0
+  const filteredItems = useMemo(() => {
+    const query = search.trim().toLowerCase()
+
+    return items.filter((item) => {
+      const matchesSearch = !query || item.name.toLowerCase().includes(query)
+      const matchesCategory =
+        !categoryFilter || item.category === categoryFilter
+      const matchesStore = !storeFilter || item.store === storeFilter
+
+      return matchesSearch && matchesCategory && matchesStore
+    })
+  }, [categoryFilter, items, search, storeFilter])
+
+  const totalQuantity = useMemo(
+    () => items.reduce((total, item) => total + (item.quantity || 1), 0),
+    [items],
+  )
+
   const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   function updateEditForm(fields: Partial<EditForm>) {
@@ -123,52 +146,68 @@ export default function Home() {
     }
   }
 
-  function openExpandedCard(item: Item) {
+  function openExpandedCard(item: Item, target: HTMLElement) {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
 
     setError('')
     setEditingItem(item)
     setEditForm(getFormFromItem(item))
+    setExpandedRect(target.getBoundingClientRect())
+    setIsExpanded(false)
+    requestAnimationFrame(() => setIsExpanded(true))
   }
 
   function closeExpandedCard() {
     if (!editingItem) return
 
-    if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-    setEditingItem(null)
-    setEditForm(emptyEditForm)
-    setError('')
-    setIsUploading(false)
-    setIsImportingImage(false)
-    setIsSaving(false)
+    setIsExpanded(false)
+    closeTimer.current = setTimeout(() => {
+      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      setEditingItem(null)
+      setEditForm(emptyEditForm)
+      setExpandedRect(null)
+      setError('')
+      setIsUploading(false)
+      setIsImportingImage(false)
+      setIsSaving(false)
+    }, 300)
   }
 
-  function getCarouselCardStyle(index: number): CSSProperties {
-    const relativeIndex = index - activeSelectedIndex
-    const isSelected = relativeIndex === 0
+  function getExpandedCardStyle(): CSSProperties {
+    if (!expandedRect) return {}
 
     return {
-      opacity: isSelected ? 1 : 0,
-      pointerEvents: isSelected ? 'auto' : 'none',
-      transform: `translate(${
-        isSelected ? '-50%' : relativeIndex < 0 ? '-68%' : '-32%'
-      }, -50%) scale(${isSelected ? 1 : 0.98})`,
-      zIndex: isSelected ? 100 : 0,
+      height: isExpanded
+        ? 'min(600px, calc(100vh - 32px))'
+        : expandedRect.height,
+      left: isExpanded ? '50%' : expandedRect.left,
+      top: isExpanded ? '50%' : expandedRect.top,
+      transform: isExpanded ? 'translate(-50%, -50%)' : 'translate(0, 0)',
+      width: isExpanded
+        ? 'min(360px, calc(100vw - 32px))'
+        : expandedRect.width,
     }
   }
 
-  function handleCarouselTouchStart(event: TouchEvent<HTMLElement>) {
-    touchStartX.current = event.touches[0].clientX
-  }
+  async function deleteItem(item: Item, event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+    const confirmed = window.confirm(`Delete "${item.name}"?`)
+    if (!confirmed) return
 
-  function handleCarouselTouchEnd(event: TouchEvent<HTMLElement>) {
-    const deltaX = event.changedTouches[0].clientX - touchStartX.current
-    if (Math.abs(deltaX) <= 50) return
+    const { error: deleteError } = await supabase
+      .from('items')
+      .delete()
+      .eq('id', item.id)
 
-    setSelectedIndex((currentIndex) => {
-      if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
-      return Math.max(0, currentIndex - 1)
-    })
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
+
+    setItems((currentItems) =>
+      currentItems.filter((currentItem) => currentItem.id !== item.id),
+    )
   }
 
   async function handleImageUpload(file: File) {
@@ -302,12 +341,72 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
-      <div
-        className={`mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5 ${
-          editingItem ? 'pointer-events-none opacity-0' : 'opacity-100'
-        }`}
-      >
+    <main className="min-h-screen bg-white px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <header>
+          <h1 className="flex items-center text-4xl font-semibold sm:text-5xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/miffy-logo.png"
+              alt="Miffy"
+              className="mr-2 inline-block h-10 w-10"
+            />
+            Miffy Collection
+          </h1>
+          <p className="mt-3 text-lg text-zinc-600">
+            Total items: {totalQuantity}
+          </p>
+        </header>
+
+        <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <label className="w-full flex-1 space-y-2">
+              <span className="text-sm font-medium text-zinc-700">Search</span>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by name"
+                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
+                type="search"
+              />
+            </label>
+
+            <label className="w-full flex-1 space-y-2">
+              <span className="text-sm font-medium text-zinc-700">
+                Category
+              </span>
+              <select
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
+              >
+                <option value="">All categories</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="w-full flex-1 space-y-2">
+              <span className="text-sm font-medium text-zinc-700">Store</span>
+              <select
+                value={storeFilter}
+                onChange={(event) => setStoreFilter(event.target.value)}
+                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
+              >
+                <option value="">All stores</option>
+                {stores.map((store) => (
+                  <option key={store} value={store}>
+                    {store}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+
         {error && !editingItem && (
           <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -318,33 +417,23 @@ export default function Home() {
           <p className="mt-10 text-center text-sm text-zinc-500">
             Loading collection...
           </p>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
             <div className="text-5xl">🐰</div>
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
-          <section
-            className="relative flex min-h-[calc(100vh-40px)] items-center justify-center overflow-hidden"
-            onTouchStart={handleCarouselTouchStart}
-            onTouchEnd={handleCarouselTouchEnd}
-          >
-            {items.map((item, index) => (
+          <section className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredItems.map((item) => (
               <article
                 key={item.id}
-                onClick={() => {
-                  if (index !== activeSelectedIndex) {
-                    setSelectedIndex(index)
-                    return
-                  }
-
-                  openExpandedCard(item)
-                }}
-                className="group absolute left-1/2 top-1/2 h-[580px] w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
-                style={getCarouselCardStyle(index)}
+                onClick={(event) => openExpandedCard(item, event.currentTarget)}
+                className="group relative z-0 aspect-[2/3] cursor-pointer transition-all duration-200 ease-in-out hover:z-20 hover:scale-105 active:z-20 active:scale-105"
               >
-                <div className="flex h-full flex-col justify-between gap-3 bg-white">
-                  <div className="flex h-[360px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                <div className="absolute inset-0 translate-x-4 translate-y-4 rotate-3 rounded-[16px] border-2 border-[#FFD6E0] bg-[#fff7fa]" />
+                <div className="absolute inset-0 translate-x-2 translate-y-2 rotate-1 rounded-[16px] border-2 border-[#FFD6E0] bg-white" />
+                <div className="relative z-10 flex h-full flex-col overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white shadow-[0_12px_30px_rgba(255,214,224,0.45)] transition-all duration-200 ease-in-out group-hover:shadow-[0_24px_60px_rgba(255,150,180,0.55)] group-active:shadow-[0_24px_60px_rgba(255,150,180,0.55)]">
+                  <div className="flex min-h-0 flex-[3] items-center justify-center bg-rose-50">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -357,20 +446,29 @@ export default function Home() {
                     )}
                   </div>
 
-                  <div className="min-h-[80px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
-                    <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
-                      {item.name}
-                    </h2>
-                    <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
-                      <span>Qty {item.quantity}</span>
-                      <span className="truncate">{item.category}</span>
-                    </div>
-                    <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
-                      {item.notes ? (
-                        <p className="line-clamp-4">{item.notes}</p>
-                      ) : (
-                        <p className="text-zinc-400">No notes</p>
+                  <div className="flex flex-[2] flex-col justify-between border-t-2 border-[#FFD6E0] p-4">
+                    <div>
+                      <h2 className="line-clamp-2 text-lg font-semibold">
+                        {item.name}
+                      </h2>
+                      <p className="mt-2 text-sm text-zinc-500">
+                        {item.category}
+                      </p>
+                      {item.store && (
+                        <p className="text-sm text-zinc-500">{item.store}</p>
                       )}
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-zinc-600">
+                        Qty {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(event) => deleteItem(item, event)}
+                        className="min-h-11 rounded-md border border-red-200 px-4 py-2 text-base font-medium text-red-600 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -382,16 +480,19 @@ export default function Home() {
 
       {editingItem && (
         <div
-          className="fixed inset-0 z-50 bg-black/60"
+          className={`fixed inset-0 z-50 bg-black/60 p-4 transition-opacity duration-300 ease-out ${
+            isExpanded ? 'opacity-100' : 'opacity-0'
+          }`}
           onClick={closeExpandedCard}
         >
           <form
             onSubmit={handleSaveChanges}
-            className="fixed inset-0 overflow-hidden bg-white"
+            className="fixed overflow-hidden rounded-[20px] border-[3px] border-[#FFD6E0] bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
+            style={getExpandedCardStyle()}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex h-full flex-col">
-              <div className="relative h-[48vh] shrink-0 border-b border-[#FFD6E0] bg-rose-50">
+              <div className="relative basis-[60%] border-b border-[#FFD6E0] bg-rose-50">
                 <label
                   className="flex h-full cursor-pointer items-center justify-center overflow-hidden"
                   onDragOver={(event) => {
@@ -455,15 +556,15 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex min-h-0 flex-1 flex-col bg-white">
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+              <div className="flex min-h-0 basis-[40%] flex-col bg-white">
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
                   <input
                     required
                     value={editForm.name}
                     onChange={(event) =>
                       updateEditForm({ name: event.target.value })
                     }
-                    className="h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
                     placeholder="Name"
                     type="text"
                   />
@@ -476,11 +577,25 @@ export default function Home() {
                         category: event.target.value as ItemCategory,
                       })
                     }
-                    className="h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
                   >
                     {categories.map((category) => (
                       <option key={category} value={category}>
                         {category}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={editForm.store}
+                    onChange={(event) =>
+                      updateEditForm({ store: event.target.value as ItemStore })
+                    }
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                  >
+                    {stores.map((store) => (
+                      <option key={store} value={store}>
+                        {store}
                       </option>
                     ))}
                   </select>
@@ -490,7 +605,7 @@ export default function Home() {
                     onChange={(event) =>
                       updateEditForm({ quantity: event.target.value })
                     }
-                    className="h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
                     min="1"
                     placeholder="Quantity"
                     type="number"
@@ -501,7 +616,7 @@ export default function Home() {
                     onChange={(event) =>
                       updateEditForm({ notes: event.target.value })
                     }
-                    className="h-24 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="h-14 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
                     placeholder="Notes"
                   />
 
@@ -536,9 +651,7 @@ export default function Home() {
 
       <Link
         href="/admin/add"
-        className={`fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200 ${
-          editingItem ? 'pointer-events-none opacity-0' : 'opacity-100'
-        }`}
+        className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
         aria-label="Add new item"
       >
         +
