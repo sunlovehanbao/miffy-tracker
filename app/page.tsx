@@ -308,88 +308,96 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
-      <div
-        className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5"
-        style={{ display: editingItem ? 'none' : undefined }}
-      >
-        {error && !editingItem && (
-          <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        )}
+      {!editingItem && (
+        <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
+          {error && (
+            <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </p>
+          )}
 
-        {isLoading ? (
-          <p className="mt-10 text-center text-sm text-zinc-500">
-            Loading collection...
-          </p>
-        ) : items.length === 0 ? (
-          <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
-            <div className="text-5xl">馃惏</div>
-            <p className="mt-4 text-lg font-medium">No items found</p>
-          </div>
-        ) : (
-          <section
-            className="relative h-[650px] overflow-hidden"
-            onTouchStart={handleFanTouchStart}
-            onTouchEnd={handleFanTouchEnd}
-          >
-            {items.map((item, index) => (
-              <article
-                key={item.id}
-                onClick={() => {
-                  if (index !== activeSelectedIndex) {
-                    setSelectedIndex(index)
-                    return
-                  }
+          {isLoading ? (
+            <p className="mt-10 text-center text-sm text-zinc-500">
+              Loading collection...
+            </p>
+          ) : items.length === 0 ? (
+            <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
+              <div className="text-5xl">馃惏</div>
+              <p className="mt-4 text-lg font-medium">No items found</p>
+            </div>
+          ) : (
+            <section
+              className="relative h-[650px] overflow-hidden"
+              onTouchStart={handleFanTouchStart}
+              onTouchEnd={handleFanTouchEnd}
+            >
+              {items.map((item, index) => (
+                <article
+                  key={item.id}
+                  onClick={() => {
+                    if (index !== activeSelectedIndex) {
+                      setSelectedIndex(index)
+                      return
+                    }
 
-                  openEditor(item)
-                }}
-                className="group absolute bottom-8 left-1/2 h-[460px] w-[300px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
-                style={getFanCardStyle(index)}
-              >
-                <div className="flex h-full flex-col justify-between gap-3 bg-white">
-                  <div className="flex h-[275px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
-                    {item.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.image_url}
-                        alt={item.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-6xl">馃惏</span>
-                    )}
-                  </div>
-
-                  <div className="min-h-[80px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
-                    <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
-                      {item.name}
-                    </h2>
-                    <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
-                      <span>Qty {item.quantity}</span>
-                      <span className="truncate">{item.category}</span>
-                    </div>
-                    <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
-                      {item.notes ? (
-                        <p className="line-clamp-4">{item.notes}</p>
+                    openEditor(item)
+                  }}
+                  className="group absolute bottom-8 left-1/2 h-[460px] w-[300px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
+                  style={getFanCardStyle(index)}
+                >
+                  <div className="flex h-full flex-col justify-between gap-3 bg-white">
+                    <div className="flex h-[275px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                      {item.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.image_url}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
                       ) : (
-                        <p className="text-zinc-400">No notes</p>
+                        <span className="text-6xl">馃惏</span>
                       )}
                     </div>
+
+                    <div className="min-h-[80px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
+                      <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
+                        {item.name}
+                      </h2>
+                      <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
+                        <span>Qty {item.quantity}</span>
+                        <span className="truncate">{item.category}</span>
+                      </div>
+                      <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
+                        {item.notes ? (
+                          <p className="line-clamp-4">{item.notes}</p>
+                        ) : (
+                          <p className="text-zinc-400">No notes</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
-          </section>
-        )}
-      </div>
+                </article>
+              ))}
+            </section>
+          )}
+        </div>
+      )}
 
       {editingItem && (
-        <form
-          onSubmit={handleSaveChanges}
-          className="fixed bottom-0 left-0 right-0 top-0 z-[9999] overflow-y-auto bg-white"
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999,
+            backgroundColor: 'white',
+            overflowY: 'auto',
+          }}
         >
-          <div className="mx-auto flex min-h-screen w-full max-w-[390px] flex-col bg-white">
+          <form onSubmit={handleSaveChanges}>
+            <div className="mx-auto flex min-h-screen w-full max-w-[390px] flex-col bg-white">
               <div className="relative border-b border-[#FFD6E0] bg-rose-50">
                 <label
                   className="flex min-h-[340px] cursor-pointer items-center justify-center overflow-hidden"
@@ -543,7 +551,8 @@ export default function Home() {
                 </div>
               </div>
               </div>
-        </form>
+          </form>
+        </div>
       )}
 
       {!editingItem && (
