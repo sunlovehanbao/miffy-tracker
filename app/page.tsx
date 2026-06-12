@@ -6,9 +6,8 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type FormEvent,
-  type MouseEvent,
+  type TouchEvent,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -54,9 +53,6 @@ export default function Home() {
   const [items, setItems] = useState<Item[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
-  const [storeFilter, setStoreFilter] = useState('')
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [expandedRect, setExpandedRect] = useState<DOMRect | null>(null)
@@ -64,7 +60,10 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false)
   const [isImportingImage, setIsImportingImage] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [isEditMode, setIsEditMode] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchStartX = useRef(0)
 
   useEffect(() => {
     async function loadItems() {
@@ -109,24 +108,8 @@ export default function Home() {
     }
   }, [editForm.previewUrl])
 
-  const filteredItems = useMemo(() => {
-    const query = search.trim().toLowerCase()
-
-    return items.filter((item) => {
-      const matchesSearch = !query || item.name.toLowerCase().includes(query)
-      const matchesCategory =
-        !categoryFilter || item.category === categoryFilter
-      const matchesStore = !storeFilter || item.store === storeFilter
-
-      return matchesSearch && matchesCategory && matchesStore
-    })
-  }, [categoryFilter, items, search, storeFilter])
-
-  const totalQuantity = useMemo(
-    () => items.reduce((total, item) => total + (item.quantity || 1), 0),
-    [items],
-  )
-
+  const activeSelectedIndex =
+    items.length > 0 ? Math.min(selectedIndex, items.length - 1) : 0
   const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   function updateEditForm(fields: Partial<EditForm>) {
@@ -154,6 +137,7 @@ export default function Home() {
     setEditingItem(item)
     setEditForm(getFormFromItem(item))
     setExpandedRect(target.getBoundingClientRect())
+    setIsEditMode(false)
     setIsExpanded(false)
     requestAnimationFrame(() => setIsExpanded(true))
   }
@@ -171,7 +155,37 @@ export default function Home() {
       setIsUploading(false)
       setIsImportingImage(false)
       setIsSaving(false)
+      setIsEditMode(false)
     }, 300)
+  }
+
+  function getFanCardStyle(index: number): CSSProperties {
+    const relativeIndex = index - activeSelectedIndex
+    const distance = Math.abs(relativeIndex)
+    const rotation = Math.max(-30, Math.min(30, relativeIndex * 10))
+    const offsetX = relativeIndex * 62
+    const offsetY = distance * 24
+    const scale = relativeIndex === 0 ? 1 : 0.85
+
+    return {
+      transform: `translateX(calc(-50% + ${offsetX}px)) translateY(${offsetY}px) rotate(${rotation}deg) scale(${scale})`,
+      transformOrigin: '50% 100%',
+      zIndex: 100 - distance,
+    }
+  }
+
+  function handleFanTouchStart(event: TouchEvent<HTMLElement>) {
+    touchStartX.current = event.touches[0].clientX
+  }
+
+  function handleFanTouchEnd(event: TouchEvent<HTMLElement>) {
+    const deltaX = event.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(deltaX) < 40) return
+
+    setSelectedIndex((currentIndex) => {
+      if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
+      return Math.max(0, currentIndex - 1)
+    })
   }
 
   function getExpandedCardStyle(): CSSProperties {
@@ -188,26 +202,6 @@ export default function Home() {
         ? 'min(360px, calc(100vw - 32px))'
         : expandedRect.width,
     }
-  }
-
-  async function deleteItem(item: Item, event: MouseEvent<HTMLButtonElement>) {
-    event.stopPropagation()
-    const confirmed = window.confirm(`Delete "${item.name}"?`)
-    if (!confirmed) return
-
-    const { error: deleteError } = await supabase
-      .from('items')
-      .delete()
-      .eq('id', item.id)
-
-    if (deleteError) {
-      setError(deleteError.message)
-      return
-    }
-
-    setItems((currentItems) =>
-      currentItems.filter((currentItem) => currentItem.id !== item.id),
-    )
   }
 
   async function handleImageUpload(file: File) {
@@ -341,72 +335,8 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-white px-4 py-8 text-zinc-950 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header>
-          <h1 className="flex items-center text-4xl font-semibold sm:text-5xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/miffy-logo.png"
-              alt="Miffy"
-              className="mr-2 inline-block h-10 w-10"
-            />
-            Miffy Collection
-          </h1>
-          <p className="mt-3 text-lg text-zinc-600">
-            Total items: {totalQuantity}
-          </p>
-        </header>
-
-        <section className="mt-8 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row">
-            <label className="w-full flex-1 space-y-2">
-              <span className="text-sm font-medium text-zinc-700">Search</span>
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by name"
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
-                type="search"
-              />
-            </label>
-
-            <label className="w-full flex-1 space-y-2">
-              <span className="text-sm font-medium text-zinc-700">
-                Category
-              </span>
-              <select
-                value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
-              >
-                <option value="">All categories</option>
-                {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="w-full flex-1 space-y-2">
-              <span className="text-sm font-medium text-zinc-700">Store</span>
-              <select
-                value={storeFilter}
-                onChange={(event) => setStoreFilter(event.target.value)}
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
-              >
-                <option value="">All stores</option>
-                {stores.map((store) => (
-                  <option key={store} value={store}>
-                    {store}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </section>
-
+    <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
+      <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
         {error && !editingItem && (
           <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -417,23 +347,33 @@ export default function Home() {
           <p className="mt-10 text-center text-sm text-zinc-500">
             Loading collection...
           </p>
-        ) : filteredItems.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
             <div className="text-5xl">🐰</div>
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
-          <section className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredItems.map((item) => (
+          <section
+            className="relative h-[650px] overflow-hidden"
+            onTouchStart={handleFanTouchStart}
+            onTouchEnd={handleFanTouchEnd}
+          >
+            {items.map((item, index) => (
               <article
                 key={item.id}
-                onClick={(event) => openExpandedCard(item, event.currentTarget)}
-                className="group relative z-0 aspect-[2/3] cursor-pointer transition-all duration-200 ease-in-out hover:z-20 hover:scale-105 active:z-20 active:scale-105"
+                onClick={(event) => {
+                  if (index !== activeSelectedIndex) {
+                    setSelectedIndex(index)
+                    return
+                  }
+
+                  openExpandedCard(item, event.currentTarget)
+                }}
+                className="group absolute bottom-8 left-1/2 h-[460px] w-[300px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
+                style={getFanCardStyle(index)}
               >
-                <div className="absolute inset-0 translate-x-4 translate-y-4 rotate-3 rounded-[16px] border-2 border-[#FFD6E0] bg-[#fff7fa]" />
-                <div className="absolute inset-0 translate-x-2 translate-y-2 rotate-1 rounded-[16px] border-2 border-[#FFD6E0] bg-white" />
-                <div className="relative z-10 flex h-full flex-col overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white shadow-[0_12px_30px_rgba(255,214,224,0.45)] transition-all duration-200 ease-in-out group-hover:shadow-[0_24px_60px_rgba(255,150,180,0.55)] group-active:shadow-[0_24px_60px_rgba(255,150,180,0.55)]">
-                  <div className="flex min-h-0 flex-[3] items-center justify-center bg-rose-50">
+                <div className="flex h-full flex-col justify-between gap-3 bg-white">
+                  <div className="flex h-[275px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -446,29 +386,20 @@ export default function Home() {
                     )}
                   </div>
 
-                  <div className="flex flex-[2] flex-col justify-between border-t-2 border-[#FFD6E0] p-4">
-                    <div>
-                      <h2 className="line-clamp-2 text-lg font-semibold">
-                        {item.name}
-                      </h2>
-                      <p className="mt-2 text-sm text-zinc-500">
-                        {item.category}
-                      </p>
-                      {item.store && (
-                        <p className="text-sm text-zinc-500">{item.store}</p>
-                      )}
+                  <div className="min-h-[80px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
+                    <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
+                      {item.name}
+                    </h2>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
+                      <span>Qty {item.quantity}</span>
+                      <span className="truncate">{item.category}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-zinc-600">
-                        Qty {item.quantity}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(event) => deleteItem(item, event)}
-                        className="min-h-11 rounded-md border border-red-200 px-4 py-2 text-base font-medium text-red-600 hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
+                    <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
+                      {item.notes ? (
+                        <p className="line-clamp-4">{item.notes}</p>
+                      ) : (
+                        <p className="text-zinc-400">No notes</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -489,9 +420,13 @@ export default function Home() {
             onSubmit={handleSaveChanges}
             className="fixed overflow-hidden rounded-[20px] border-[3px] border-[#FFD6E0] bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
             style={getExpandedCardStyle()}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              if (!isEditMode) setIsEditMode(true)
+            }}
           >
-            <div className="flex h-full flex-col">
+            {isEditMode ? (
+              <div className="flex h-full flex-col">
               <div className="relative basis-[60%] border-b border-[#FFD6E0] bg-rose-50">
                 <label
                   className="flex h-full cursor-pointer items-center justify-center overflow-hidden"
@@ -644,7 +579,39 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-            </div>
+              </div>
+            ) : (
+              <div className="flex h-full cursor-pointer flex-col gap-3 bg-white p-3">
+                <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                  {editImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={editImageUrl}
+                      alt={editForm.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-6xl">🐰</span>
+                  )}
+                </div>
+                <div className="rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-3 text-center">
+                  <h2 className="line-clamp-2 text-xl font-bold leading-tight text-[#FF85A1]">
+                    {editForm.name}
+                  </h2>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
+                    <span>Qty {editForm.quantity}</span>
+                    <span className="truncate">{editForm.category}</span>
+                  </div>
+                  <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
+                    {editForm.notes ? (
+                      <p className="line-clamp-4">{editForm.notes}</p>
+                    ) : (
+                      <p className="text-zinc-400">No notes</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
         </div>
       )}
