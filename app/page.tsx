@@ -1,9 +1,9 @@
-﻿'use client'
+'use client'
 
 import Link from 'next/link'
 import {
-  type CSSProperties,
   type ChangeEvent,
+  type CSSProperties,
   type FormEvent,
   type TouchEvent,
   useEffect,
@@ -11,27 +11,24 @@ import {
   useState,
 } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Item, ItemStore } from '@/types/item'
+import type { Item } from '@/types/item'
 
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
+const swipeThreshold = 50
 
 interface EditForm {
   name: string
-  store: ItemStore
   quantity: string
   notes: string
   imageUrl: string
-  imageUrlInput: string
   previewUrl: string
 }
 
 const emptyEditForm: EditForm = {
   name: '',
-  store: 'Other',
   quantity: '1',
   notes: '',
   imageUrl: '',
-  imageUrlInput: '',
   previewUrl: '',
 }
 
@@ -39,12 +36,16 @@ export default function Home() {
   const [items, setItems] = useState<Item[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [selectedIndex, setSelectedIndex] = useState(0)
   const touchStartX = useRef(0)
+
+  const activeCardIndex =
+    items.length > 0 ? Math.min(activeIndex, items.length - 1) : 0
+  const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   async function loadItems(showLoading = false) {
     if (showLoading) setIsLoading(true)
@@ -71,28 +72,16 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') closeEditor()
+    if (activeIndex > items.length - 1) {
+      setActiveIndex(Math.max(items.length - 1, 0))
     }
-
-    if (expandedId) window.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-    // closeEditor reads the active form state when Escape is pressed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandedId])
+  }, [activeIndex, items.length])
 
   useEffect(() => {
     return () => {
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
     }
   }, [editForm.previewUrl])
-
-  const activeSelectedIndex =
-    items.length > 0 ? Math.min(selectedIndex, items.length - 1) : 0
-  const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   function updateEditForm(fields: Partial<EditForm>) {
     setEditForm((currentForm) => ({ ...currentForm, ...fields }))
@@ -101,26 +90,21 @@ export default function Home() {
   function getFormFromItem(item: Item): EditForm {
     return {
       name: item.name || '',
-      store: item.store || 'Other',
       quantity: String(item.quantity || 1),
       notes: item.notes || '',
       imageUrl: item.image_url || '',
-      imageUrlInput: item.image_url || '',
       previewUrl: '',
     }
   }
 
   function openEditor(item: Item) {
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-
     setError('')
     setExpandedId(item.id)
     setEditForm(getFormFromItem(item))
   }
 
   function closeEditor() {
-    if (!expandedId) return
-
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
     setExpandedId(null)
     setEditForm(emptyEditForm)
@@ -129,30 +113,29 @@ export default function Home() {
     setIsSaving(false)
   }
 
-  function getFanCardStyle(index: number): CSSProperties {
-    const relativeIndex = index - activeSelectedIndex
-    const distance = Math.abs(relativeIndex)
-    const rotation = Math.max(-30, Math.min(30, relativeIndex * 10))
-    const offsetX = relativeIndex * 62
-    const offsetY = distance * 24
-    const scale = relativeIndex === 0 ? 1 : 0.85
+  function getCardStyle(index: number): CSSProperties {
+    const relativeIndex = index - activeCardIndex
+    const isVisible = Math.abs(relativeIndex) <= 1
 
     return {
-      transform: `translateX(calc(-50% + ${offsetX}px)) translateY(${offsetY}px) rotate(${rotation}deg) scale(${scale})`,
-      transformOrigin: '50% 100%',
-      zIndex: 100 - distance,
+      opacity: isVisible ? 1 : 0,
+      pointerEvents: isVisible ? 'auto' : 'none',
+      transform: `translateX(calc(-50% + ${relativeIndex * 325}px))`,
+      zIndex: 20 - Math.abs(relativeIndex),
     }
   }
 
-  function handleFanTouchStart(event: TouchEvent<HTMLElement>) {
+  function handleTouchStart(event: TouchEvent<HTMLElement>) {
     touchStartX.current = event.touches[0].clientX
   }
 
-  function handleFanTouchEnd(event: TouchEvent<HTMLElement>) {
-    const deltaX = event.changedTouches[0].clientX - touchStartX.current
-    if (Math.abs(deltaX) < 40) return
+  function handleTouchEnd(event: TouchEvent<HTMLElement>) {
+    if (expandedId) return
 
-    setSelectedIndex((currentIndex) => {
+    const deltaX = event.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(deltaX) < swipeThreshold) return
+
+    setActiveIndex((currentIndex) => {
       if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
       return Math.max(0, currentIndex - 1)
     })
@@ -168,8 +151,8 @@ export default function Home() {
       }
 
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-      const previewUrl = URL.createObjectURL(file)
 
+      const previewUrl = URL.createObjectURL(file)
       const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
       const filePath = `${crypto.randomUUID()}.${extension}`
 
@@ -188,7 +171,6 @@ export default function Home() {
 
       updateEditForm({
         imageUrl: data.publicUrl,
-        imageUrlInput: data.publicUrl,
         previewUrl,
       })
     } catch (uploadError) {
@@ -213,21 +195,16 @@ export default function Home() {
     setError('')
     setIsSaving(true)
 
-    const updatedItem: Partial<Item> = {
+    const updates = {
       name: editForm.name.trim(),
-      store: editForm.store,
       quantity: Number(editForm.quantity) || 1,
-      notes: editForm.notes.trim() || undefined,
-      image_url: editForm.imageUrl || undefined,
+      notes: editForm.notes.trim() || null,
+      image_url: editForm.imageUrl || null,
     }
 
     const { data, error: updateError } = await supabase
       .from('items')
-      .update({
-        ...updatedItem,
-        notes: updatedItem.notes || null,
-        image_url: updatedItem.image_url || null,
-      })
+      .update(updates)
       .eq('id', expandedId)
       .select('*')
       .single()
@@ -251,7 +228,7 @@ export default function Home() {
     <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
       <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
         {error && (
-          <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </p>
         )}
@@ -262,48 +239,49 @@ export default function Home() {
           </p>
         ) : items.length === 0 ? (
           <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
-            <div className="text-5xl">馃惏</div>
+            <div className="text-5xl">🐰</div>
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
           <section
-            className={`relative overflow-hidden transition-[height] duration-300 ease-out ${
-              expandedId ? 'h-[820px]' : 'h-[650px]'
+            className={`relative overflow-hidden transition-[min-height] duration-300 ease-out ${
+              expandedId ? 'min-h-[760px]' : 'min-h-[560px]'
             }`}
-            onTouchStart={expandedId ? undefined : handleFanTouchStart}
-            onTouchEnd={expandedId ? undefined : handleFanTouchEnd}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
           >
             {items.map((item, index) => {
-              const isEditingThisItem = expandedId === item.id
-              const isDimmed = Boolean(expandedId && !isEditingThisItem)
+              const isActive = index === activeCardIndex
+              const isExpanded = expandedId === item.id
+              const isSideCard = Math.abs(index - activeCardIndex) === 1
+              const sideCardDimmed = Boolean(expandedId && !isExpanded)
 
               return (
                 <article
                   key={item.id}
+                  className={`absolute left-1/2 top-6 w-[340px] overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[transform,opacity,min-height,box-shadow] duration-300 ease-out ${
+                    isActive ? 'cursor-pointer' : 'cursor-pointer'
+                  } ${isExpanded ? 'min-h-[700px]' : 'min-h-[460px]'}`}
+                  style={{
+                    ...getCardStyle(index),
+                    opacity: sideCardDimmed ? 0.4 : getCardStyle(index).opacity,
+                  }}
                   onClick={() => {
                     if (expandedId) return
-
-                    setSelectedIndex(index)
+                    if (!isActive) {
+                      setActiveIndex(index)
+                      return
+                    }
                     openEditor(item)
                   }}
-                  className={`group absolute bottom-8 left-1/2 w-[300px] cursor-pointer overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[height,opacity,box-shadow] duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)] ${
-                    isEditingThisItem
-                      ? 'h-[700px]'
-                      : 'h-[460px]'
-                  }`}
-                  style={{
-                    ...getFanCardStyle(index),
-                    opacity: isDimmed ? 0.3 : 1,
-                    pointerEvents: isDimmed ? 'none' : 'auto',
-                  }}
                 >
-                  {isEditingThisItem ? (
+                  {isExpanded ? (
                     <form
-                      onSubmit={handleSaveChanges}
+                      className="flex min-h-[674px] flex-col gap-3"
                       onClick={(event) => event.stopPropagation()}
-                      className="flex h-full flex-col gap-3 bg-white"
+                      onSubmit={handleSaveChanges}
                     >
-                      <div className="relative flex h-[330px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                      <div className="relative flex h-[320px] items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
                         <label
                           className="flex h-full w-full cursor-pointer items-center justify-center overflow-hidden"
                           onDragOver={(event) => {
@@ -338,12 +316,7 @@ export default function Home() {
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <div className="text-center">
-                              <div className="text-5xl">馃惏</div>
-                              <p className="mt-2 text-sm font-medium text-zinc-700">
-                                Click to upload an image
-                              </p>
-                            </div>
+                            <span className="text-6xl">🐰</span>
                           )}
                         </label>
                         {isUploading && (
@@ -353,15 +326,15 @@ export default function Home() {
                         )}
                       </div>
 
-                      <div className="flex min-h-0 flex-1 flex-col rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7]">
-                        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+                      <div className="flex flex-1 flex-col rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7]">
+                        <div className="flex-1 space-y-4 px-4 py-4">
                           <input
                             required
                             value={editForm.name}
                             onChange={(event) =>
                               updateEditForm({ name: event.target.value })
                             }
-                            className="min-h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
+                            className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
                             placeholder="Name"
                             type="text"
                           />
@@ -371,7 +344,7 @@ export default function Home() {
                             onChange={(event) =>
                               updateEditForm({ quantity: event.target.value })
                             }
-                            className="min-h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                            className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
                             min="1"
                             placeholder="Quantity"
                             type="number"
@@ -382,23 +355,23 @@ export default function Home() {
                             onChange={(event) =>
                               updateEditForm({ notes: event.target.value })
                             }
-                            className="min-h-20 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                            className="min-h-28 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
                             placeholder="Notes"
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 border-t border-[#FFD6E0] bg-white/80 px-4 py-3">
+                        <div className="grid grid-cols-2 gap-3 border-t border-[#FFD6E0] bg-white px-4 py-3">
                           <button
                             type="submit"
                             disabled={isSaving || isUploading}
-                            className="min-h-11 rounded-md bg-[#FF8FB3] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+                            className="min-h-11 rounded-md bg-[#FF8FB3] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
                           >
-                            {isSaving ? 'Saving...' : 'Save Changes'}
+                            {isSaving ? 'Saving...' : 'Save'}
                           </button>
                           <button
                             type="button"
                             onClick={closeEditor}
-                            className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50"
+                            className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50"
                           >
                             Cancel
                           </button>
@@ -406,8 +379,8 @@ export default function Home() {
                       </div>
                     </form>
                   ) : (
-                    <div className="flex h-full flex-col justify-between gap-3 bg-white">
-                      <div className="flex h-[275px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                    <div className="flex h-full min-h-[434px] flex-col gap-3">
+                      <div className="flex h-[300px] items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
                         {item.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -416,21 +389,20 @@ export default function Home() {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <span className="text-6xl">馃惏</span>
+                          <span className="text-6xl">🐰</span>
                         )}
                       </div>
 
-                      <div className="min-h-[80px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
+                      <div className="min-h-[120px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-3 text-center">
                         <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
                           {item.name}
                         </h2>
-                        <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
-                          <span>Qty {item.quantity}</span>
-                          <span className="truncate">{item.category}</span>
-                        </div>
+                        <p className="mt-2 text-sm font-semibold text-[#FF85A1]">
+                          Qty {item.quantity}
+                        </p>
                         <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
                           {item.notes ? (
-                            <p className="line-clamp-4">{item.notes}</p>
+                            <p className="line-clamp-3">{item.notes}</p>
                           ) : (
                             <p className="text-zinc-400">No notes</p>
                           )}
@@ -438,12 +410,13 @@ export default function Home() {
                       </div>
                     </div>
                   )}
+                  {isSideCard && <span className="sr-only">Side card</span>}
                 </article>
               )
             })}
-            </section>
-          )}
-        </div>
+          </section>
+        )}
+      </div>
 
       {!expandedId && (
         <Link
