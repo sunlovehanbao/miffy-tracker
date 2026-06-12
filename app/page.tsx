@@ -6,6 +6,7 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type FormEvent,
+  type TouchEvent,
   useEffect,
   useRef,
   useState,
@@ -59,7 +60,10 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false)
   const [isImportingImage, setIsImportingImage] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [isEditMode, setIsEditMode] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchStartX = useRef(0)
 
   useEffect(() => {
     async function loadItems() {
@@ -104,6 +108,8 @@ export default function Home() {
     }
   }, [editForm.previewUrl])
 
+  const activeSelectedIndex =
+    items.length > 0 ? Math.min(selectedIndex, items.length - 1) : 0
   const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   function updateEditForm(fields: Partial<EditForm>) {
@@ -131,6 +137,7 @@ export default function Home() {
     setEditingItem(item)
     setEditForm(getFormFromItem(item))
     setExpandedRect(target.getBoundingClientRect())
+    setIsEditMode(false)
     setIsExpanded(false)
     requestAnimationFrame(() => setIsExpanded(true))
   }
@@ -148,7 +155,37 @@ export default function Home() {
       setIsUploading(false)
       setIsImportingImage(false)
       setIsSaving(false)
+      setIsEditMode(false)
     }, 300)
+  }
+
+  function getFanCardStyle(index: number): CSSProperties {
+    const relativeIndex = index - activeSelectedIndex
+    const distance = Math.abs(relativeIndex)
+    const rotation = Math.max(-30, Math.min(30, relativeIndex * 10))
+    const offsetX = relativeIndex * 62
+    const offsetY = distance * 24
+    const scale = relativeIndex === 0 ? 1 : 0.85
+
+    return {
+      transform: `translateX(calc(-50% + ${offsetX}px)) translateY(${offsetY}px) rotate(${rotation}deg) scale(${scale})`,
+      transformOrigin: '50% 100%',
+      zIndex: 100 - distance,
+    }
+  }
+
+  function handleFanTouchStart(event: TouchEvent<HTMLElement>) {
+    touchStartX.current = event.touches[0].clientX
+  }
+
+  function handleFanTouchEnd(event: TouchEvent<HTMLElement>) {
+    const deltaX = event.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(deltaX) < 40) return
+
+    setSelectedIndex((currentIndex) => {
+      if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
+      return Math.max(0, currentIndex - 1)
+    })
   }
 
   function getExpandedCardStyle(): CSSProperties {
@@ -316,15 +353,27 @@ export default function Home() {
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
-          <section className="flex flex-col items-center gap-4">
-            {items.map((item) => (
+          <section
+            className="relative h-[650px] overflow-hidden"
+            onTouchStart={handleFanTouchStart}
+            onTouchEnd={handleFanTouchEnd}
+          >
+            {items.map((item, index) => (
               <article
                 key={item.id}
-                onClick={(event) => openExpandedCard(item, event.currentTarget)}
-                className="group h-[520px] w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:scale-105 active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
+                onClick={(event) => {
+                  if (index !== activeSelectedIndex) {
+                    setSelectedIndex(index)
+                    return
+                  }
+
+                  openExpandedCard(item, event.currentTarget)
+                }}
+                className="group absolute bottom-8 left-1/2 h-[460px] w-[300px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
+                style={getFanCardStyle(index)}
               >
                 <div className="flex h-full flex-col justify-between gap-3 bg-white">
-                  <div className="flex h-[300px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                  <div className="flex h-[275px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -371,9 +420,13 @@ export default function Home() {
             onSubmit={handleSaveChanges}
             className="fixed overflow-hidden rounded-[20px] border-[3px] border-[#FFD6E0] bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
             style={getExpandedCardStyle()}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              if (!isEditMode) setIsEditMode(true)
+            }}
           >
-            <div className="flex h-full flex-col">
+            {isEditMode ? (
+              <div className="flex h-full flex-col">
               <div className="relative basis-[60%] border-b border-[#FFD6E0] bg-rose-50">
                 <label
                   className="flex h-full cursor-pointer items-center justify-center overflow-hidden"
@@ -526,7 +579,39 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-            </div>
+              </div>
+            ) : (
+              <div className="flex h-full cursor-pointer flex-col gap-3 bg-white p-3">
+                <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                  {editImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={editImageUrl}
+                      alt={editForm.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-6xl">🐰</span>
+                  )}
+                </div>
+                <div className="rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-3 text-center">
+                  <h2 className="line-clamp-2 text-xl font-bold leading-tight text-[#FF85A1]">
+                    {editForm.name}
+                  </h2>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
+                    <span>Qty {editForm.quantity}</span>
+                    <span className="truncate">{editForm.category}</span>
+                  </div>
+                  <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
+                    {editForm.notes ? (
+                      <p className="line-clamp-4">{editForm.notes}</p>
+                    ) : (
+                      <p className="text-zinc-400">No notes</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
         </div>
       )}
