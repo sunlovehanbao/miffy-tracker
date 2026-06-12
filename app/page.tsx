@@ -403,13 +403,6 @@ export default function Home() {
                         <p className="mt-2 text-sm font-semibold text-[#FF85A1]">
                           Qty {item.quantity}
                         </p>
-                        <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
-                          {item.notes ? (
-                            <p className="line-clamp-3">{item.notes}</p>
-                          ) : (
-                            <p className="text-zinc-400">No notes</p>
-                          )}
-                        </div>
                       </div>
                     </div>
                   )}
