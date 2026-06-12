@@ -7,7 +7,6 @@ import {
   type ClipboardEvent,
   type FormEvent,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -53,9 +52,6 @@ export default function Home() {
   const [items, setItems] = useState<Item[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
-  const [storeFilter, setStoreFilter] = useState('')
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [expandedRect, setExpandedRect] = useState<DOMRect | null>(null)
@@ -107,19 +103,6 @@ export default function Home() {
       if (closeTimer.current) clearTimeout(closeTimer.current)
     }
   }, [editForm.previewUrl])
-
-  const filteredItems = useMemo(() => {
-    const query = search.trim().toLowerCase()
-
-    return items.filter((item) => {
-      const matchesSearch = !query || item.name.toLowerCase().includes(query)
-      const matchesCategory =
-        !categoryFilter || item.category === categoryFilter
-      const matchesStore = !storeFilter || item.store === storeFilter
-
-      return matchesSearch && matchesCategory && matchesStore
-    })
-  }, [categoryFilter, items, search, storeFilter])
 
   const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
@@ -317,55 +300,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
       <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
-        <section className="rounded-lg border border-zinc-200 bg-white p-4">
-          <div className="flex w-full flex-col gap-4">
-            <label className="w-full flex-1 space-y-2">
-              <span className="text-sm font-medium text-zinc-700">Search</span>
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by name"
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
-                type="search"
-              />
-            </label>
-
-            <label className="w-full flex-1 space-y-2">
-              <span className="text-sm font-medium text-zinc-700">
-                Category
-              </span>
-              <select
-                value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
-              >
-                <option value="">All categories</option>
-                {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="w-full flex-1 space-y-2">
-              <span className="text-sm font-medium text-zinc-700">Store</span>
-              <select
-                value={storeFilter}
-                onChange={(event) => setStoreFilter(event.target.value)}
-                className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base outline-none focus:border-zinc-950"
-              >
-                <option value="">All stores</option>
-                {stores.map((store) => (
-                  <option key={store} value={store}>
-                    {store}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </section>
-
         {error && !editingItem && (
           <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -376,14 +310,14 @@ export default function Home() {
           <p className="mt-10 text-center text-sm text-zinc-500">
             Loading collection...
           </p>
-        ) : filteredItems.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
             <div className="text-5xl">🐰</div>
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
-          <section className="mt-6 flex flex-col items-center gap-4">
-            {filteredItems.map((item) => (
+          <section className="flex flex-col items-center gap-4">
+            {items.map((item) => (
               <article
                 key={item.id}
                 onClick={(event) => openExpandedCard(item, event.currentTarget)}
