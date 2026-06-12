@@ -4,7 +4,6 @@ import Link from 'next/link'
 import {
   type CSSProperties,
   type ChangeEvent,
-  type ClipboardEvent,
   type FormEvent,
   type TouchEvent,
   useEffect,
@@ -52,10 +51,9 @@ export default function Home() {
   const [items, setItems] = useState<Item[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
-  const [editingItem, setEditingItem] = useState<Item | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
-  const [isImportingImage, setIsImportingImage] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const touchStartX = useRef(0)
@@ -89,14 +87,14 @@ export default function Home() {
       if (event.key === 'Escape') closeEditor()
     }
 
-    if (editingItem) window.addEventListener('keydown', handleKeyDown)
+    if (expandedId) window.addEventListener('keydown', handleKeyDown)
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
     // closeEditor reads the active form state when Escape is pressed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingItem])
+  }, [expandedId])
 
   useEffect(() => {
     return () => {
@@ -129,19 +127,18 @@ export default function Home() {
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
 
     setError('')
-    setEditingItem(item)
+    setExpandedId(item.id)
     setEditForm(getFormFromItem(item))
   }
 
   function closeEditor() {
-    if (!editingItem) return
+    if (!expandedId) return
 
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-    setEditingItem(null)
+    setExpandedId(null)
     setEditForm(emptyEditForm)
     setError('')
     setIsUploading(false)
-    setIsImportingImage(false)
     setIsSaving(false)
   }
 
@@ -222,50 +219,9 @@ export default function Home() {
     event.target.value = ''
   }
 
-  async function importImageFromUrl(url: string) {
-    const trimmedUrl = url.trim()
-    if (!trimmedUrl || trimmedUrl === editForm.imageUrl) return
-
-    setError('')
-    setIsImportingImage(true)
-
-    try {
-      const response = await fetch('/api/fetch-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: trimmedUrl }),
-      })
-      const data = (await response.json()) as { url?: string }
-
-      if (!response.ok || !data.url) {
-        throw new Error('Could not load this image, try another URL')
-      }
-
-      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-      updateEditForm({
-        imageUrl: data.url,
-        imageUrlInput: data.url,
-        previewUrl: '',
-      })
-    } catch {
-      setError('Could not load this image, try another URL')
-    } finally {
-      setIsImportingImage(false)
-    }
-  }
-
-  function handleImageUrlPaste(event: ClipboardEvent<HTMLInputElement>) {
-    const pastedUrl = event.clipboardData.getData('text').trim()
-    if (!pastedUrl) return
-
-    event.preventDefault()
-    updateEditForm({ imageUrlInput: pastedUrl })
-    importImageFromUrl(pastedUrl)
-  }
-
   async function handleSaveChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!editingItem) return
+    if (!expandedId) return
 
     setError('')
     setIsSaving(true)
@@ -286,7 +242,7 @@ export default function Home() {
         notes: updatedItem.notes || null,
         image_url: updatedItem.image_url || null,
       })
-      .eq('id', editingItem.id)
+      .eq('id', expandedId)
       .select('*')
       .single()
 
@@ -326,31 +282,27 @@ export default function Home() {
         ) : (
           <section
             className={`relative overflow-hidden transition-all duration-300 ease-out ${
-              editingItem ? 'h-[820px]' : 'h-[650px]'
+              expandedId ? 'h-[820px]' : 'h-[650px]'
             }`}
-            onTouchStart={editingItem ? undefined : handleFanTouchStart}
-            onTouchEnd={editingItem ? undefined : handleFanTouchEnd}
+            onTouchStart={expandedId ? undefined : handleFanTouchStart}
+            onTouchEnd={expandedId ? undefined : handleFanTouchEnd}
           >
             {items.map((item, index) => {
-              const isEditingThisItem = editingItem?.id === item.id
-              const isDimmed = Boolean(editingItem && !isEditingThisItem)
+              const isEditingThisItem = expandedId === item.id
+              const isDimmed = Boolean(expandedId && !isEditingThisItem)
 
               return (
                 <article
                   key={item.id}
                   onClick={() => {
-                    if (editingItem) return
+                    if (expandedId) return
 
-                    if (index !== activeSelectedIndex) {
-                      setSelectedIndex(index)
-                      return
-                    }
-
+                    setSelectedIndex(index)
                     openEditor(item)
                   }}
                   className={`group absolute bottom-8 left-1/2 cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)] ${
                     isEditingThisItem
-                      ? 'h-[700px] w-[340px]'
+                      ? 'h-auto min-h-[700px] w-[300px]'
                       : 'h-[460px] w-[300px]'
                   }`}
                   style={{
@@ -408,11 +360,9 @@ export default function Home() {
                             </div>
                           )}
                         </label>
-                        {(isUploading || isImportingImage) && (
+                        {isUploading && (
                           <p className="absolute bottom-3 rounded-md bg-white/90 px-3 py-1 text-xs text-zinc-500 shadow-sm">
-                            {isUploading
-                              ? 'Uploading image...'
-                              : 'Importing image...'}
+                            Uploading image...
                           </p>
                         )}
                       </div>
@@ -471,7 +421,7 @@ export default function Home() {
                         <div className="grid grid-cols-2 gap-3 border-t border-[#FFD6E0] bg-white/80 px-4 py-3">
                           <button
                             type="submit"
-                            disabled={isSaving || isUploading || isImportingImage}
+                            disabled={isSaving || isUploading}
                             className="min-h-11 rounded-md bg-[#FF8FB3] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
                           >
                             {isSaving ? 'Saving...' : 'Save Changes'}
@@ -526,7 +476,7 @@ export default function Home() {
           )}
         </div>
 
-      {!editingItem && (
+      {!expandedId && (
         <Link
           href="/admin/add"
           className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
