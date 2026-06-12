@@ -321,33 +321,31 @@ export default function Home() {
               <article
                 key={item.id}
                 onClick={(event) => openExpandedCard(item, event.currentTarget)}
-                className="group h-[510px] w-[340px] cursor-pointer rounded-[12px] border-[3px] border-[#FFB7C5] bg-white p-[5px] shadow-[0_4px_12px_rgba(255,183,197,0.4)] transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-[0_12px_30px_rgba(255,183,197,0.6)] active:scale-105 active:shadow-[0_12px_30px_rgba(255,183,197,0.6)]"
+                className="group h-[510px] w-[340px] cursor-pointer rounded-[16px] border-4 border-[#FFB7C5] bg-[#FFD6E0] p-2 shadow-[0_8px_24px_rgba(255,183,197,0.4)] transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-[0_14px_36px_rgba(255,183,197,0.55)] active:scale-105 active:shadow-[0_14px_36px_rgba(255,183,197,0.55)]"
               >
-                <div className="flex h-full flex-col overflow-hidden rounded-[8px] border border-[#FFD6E0] bg-white">
-                  <div className="flex h-14 shrink-0 items-center justify-center px-4 text-center">
-                    <h2 className="line-clamp-2 text-lg font-semibold leading-tight text-[#FF8FA8]">
-                      {item.name}
-                    </h2>
-                  </div>
-
-                  <div className="mx-3 flex min-h-0 flex-[3] items-center justify-center overflow-hidden rounded-md border border-[#FFD6E0] bg-rose-50">
+                <div className="flex h-full flex-col overflow-hidden rounded-[10px] border-2 border-[#FFD6E0] bg-white">
+                  <div className="m-2 mb-0 flex min-h-0 flex-[13] items-center justify-center overflow-hidden rounded-md bg-[#FFD6E0] p-1">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={item.image_url}
                         alt={item.name}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full rounded-[4px] object-cover"
                       />
                     ) : (
                       <span className="text-6xl">🐰</span>
                     )}
                   </div>
 
-                  <div className="mt-3 flex flex-[2] flex-col items-center justify-center gap-3 border-t border-[#FFD6E0] bg-[#FFF0F3] p-4 text-center">
-                    <p className="text-base font-semibold text-[#FF8FA8]">
-                      Qty {item.quantity}
-                    </p>
-                    <div className="max-h-24 overflow-hidden text-sm leading-6 text-zinc-600">
+                  <div className="mt-2 flex flex-[7] flex-col justify-start gap-2 border-t-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
+                    <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
+                      {item.name}
+                    </h2>
+                    <div className="flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
+                      <span>Qty {item.quantity}</span>
+                      <span className="truncate">{item.category}</span>
+                    </div>
+                    <div className="min-h-0 overflow-hidden text-xs leading-5 text-zinc-500">
                       {item.notes ? (
                         <p className="line-clamp-4">{item.notes}</p>
                       ) : (
