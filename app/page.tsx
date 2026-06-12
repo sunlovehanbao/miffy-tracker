@@ -24,7 +24,6 @@ const categories: ItemCategory[] = [
   'Other',
 ]
 
-const stores: ItemStore[] = ['Marshalls', 'TJ Maxx', 'HomeGoods', 'Other']
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 
 interface EditForm {
@@ -61,7 +60,6 @@ export default function Home() {
   const [isImportingImage, setIsImportingImage] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [isEditMode, setIsEditMode] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchStartX = useRef(0)
 
@@ -137,7 +135,6 @@ export default function Home() {
     setEditingItem(item)
     setEditForm(getFormFromItem(item))
     setExpandedRect(target.getBoundingClientRect())
-    setIsEditMode(false)
     setIsExpanded(false)
     requestAnimationFrame(() => setIsExpanded(true))
   }
@@ -155,30 +152,28 @@ export default function Home() {
       setIsUploading(false)
       setIsImportingImage(false)
       setIsSaving(false)
-      setIsEditMode(false)
     }, 300)
   }
 
-  function getFanCardStyle(index: number): CSSProperties {
+  function getCarouselCardStyle(index: number): CSSProperties {
     const relativeIndex = index - activeSelectedIndex
     const distance = Math.abs(relativeIndex)
-    const rotation = Math.max(-30, Math.min(30, relativeIndex * 10))
-    const offsetX = relativeIndex * 62
-    const offsetY = distance * 24
-    const scale = relativeIndex === 0 ? 1 : 0.85
+    const offsetX = relativeIndex * 325
+    const scale = relativeIndex === 0 ? 1 : 0.96
 
     return {
-      transform: `translateX(calc(-50% + ${offsetX}px)) translateY(${offsetY}px) rotate(${rotation}deg) scale(${scale})`,
-      transformOrigin: '50% 100%',
+      opacity: distance > 1 ? 0 : 1,
+      pointerEvents: distance > 1 ? 'none' : 'auto',
+      transform: `translateX(calc(-50% + ${offsetX}px)) scale(${scale})`,
       zIndex: 100 - distance,
     }
   }
 
-  function handleFanTouchStart(event: TouchEvent<HTMLElement>) {
+  function handleCarouselTouchStart(event: TouchEvent<HTMLElement>) {
     touchStartX.current = event.touches[0].clientX
   }
 
-  function handleFanTouchEnd(event: TouchEvent<HTMLElement>) {
+  function handleCarouselTouchEnd(event: TouchEvent<HTMLElement>) {
     const deltaX = event.changedTouches[0].clientX - touchStartX.current
     if (Math.abs(deltaX) < 40) return
 
@@ -192,15 +187,11 @@ export default function Home() {
     if (!expandedRect) return {}
 
     return {
-      height: isExpanded
-        ? 'min(600px, calc(100vh - 32px))'
-        : expandedRect.height,
+      height: isExpanded ? '100vh' : expandedRect.height,
       left: isExpanded ? '50%' : expandedRect.left,
-      top: isExpanded ? '50%' : expandedRect.top,
-      transform: isExpanded ? 'translate(-50%, -50%)' : 'translate(0, 0)',
-      width: isExpanded
-        ? 'min(360px, calc(100vw - 32px))'
-        : expandedRect.width,
+      top: isExpanded ? 0 : expandedRect.top,
+      transform: isExpanded ? 'translateX(-50%)' : 'translate(0, 0)',
+      width: isExpanded ? 'min(390px, 100vw)' : expandedRect.width,
     }
   }
 
@@ -354,9 +345,9 @@ export default function Home() {
           </div>
         ) : (
           <section
-            className="relative h-[650px] overflow-hidden"
-            onTouchStart={handleFanTouchStart}
-            onTouchEnd={handleFanTouchEnd}
+            className="relative h-[640px] overflow-hidden"
+            onTouchStart={handleCarouselTouchStart}
+            onTouchEnd={handleCarouselTouchEnd}
           >
             {items.map((item, index) => (
               <article
@@ -369,11 +360,11 @@ export default function Home() {
 
                   openExpandedCard(item, event.currentTarget)
                 }}
-                className="group absolute bottom-8 left-1/2 h-[460px] w-[300px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
-                style={getFanCardStyle(index)}
+                className="group absolute bottom-12 left-1/2 h-[520px] w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
+                style={getCarouselCardStyle(index)}
               >
                 <div className="flex h-full flex-col justify-between gap-3 bg-white">
-                  <div className="flex h-[275px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
+                  <div className="flex h-[300px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -411,23 +402,19 @@ export default function Home() {
 
       {editingItem && (
         <div
-          className={`fixed inset-0 z-50 bg-black/60 p-4 transition-opacity duration-300 ease-out ${
+          className={`fixed inset-0 z-50 bg-black/60 transition-opacity duration-300 ease-out ${
             isExpanded ? 'opacity-100' : 'opacity-0'
           }`}
           onClick={closeExpandedCard}
         >
           <form
             onSubmit={handleSaveChanges}
-            className="fixed overflow-hidden rounded-[20px] border-[3px] border-[#FFD6E0] bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
+            className="fixed overflow-hidden bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
             style={getExpandedCardStyle()}
-            onClick={(event) => {
-              event.stopPropagation()
-              if (!isEditMode) setIsEditMode(true)
-            }}
+            onClick={(event) => event.stopPropagation()}
           >
-            {isEditMode ? (
-              <div className="flex h-full flex-col">
-              <div className="relative basis-[60%] border-b border-[#FFD6E0] bg-rose-50">
+            <div className="flex h-full flex-col">
+              <div className="relative h-[48vh] shrink-0 border-b border-[#FFD6E0] bg-rose-50">
                 <label
                   className="flex h-full cursor-pointer items-center justify-center overflow-hidden"
                   onDragOver={(event) => {
@@ -491,15 +478,15 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex min-h-0 basis-[40%] flex-col bg-white">
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
+              <div className="flex min-h-0 flex-1 flex-col bg-white">
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
                   <input
                     required
                     value={editForm.name}
                     onChange={(event) =>
                       updateEditForm({ name: event.target.value })
                     }
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
+                    className="h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
                     placeholder="Name"
                     type="text"
                   />
@@ -512,25 +499,11 @@ export default function Home() {
                         category: event.target.value as ItemCategory,
                       })
                     }
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
                   >
                     {categories.map((category) => (
                       <option key={category} value={category}>
                         {category}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={editForm.store}
-                    onChange={(event) =>
-                      updateEditForm({ store: event.target.value as ItemStore })
-                    }
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
-                  >
-                    {stores.map((store) => (
-                      <option key={store} value={store}>
-                        {store}
                       </option>
                     ))}
                   </select>
@@ -540,7 +513,7 @@ export default function Home() {
                     onChange={(event) =>
                       updateEditForm({ quantity: event.target.value })
                     }
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
                     min="1"
                     placeholder="Quantity"
                     type="number"
@@ -551,7 +524,7 @@ export default function Home() {
                     onChange={(event) =>
                       updateEditForm({ notes: event.target.value })
                     }
-                    className="h-14 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="h-24 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
                     placeholder="Notes"
                   />
 
@@ -579,39 +552,7 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              </div>
-            ) : (
-              <div className="flex h-full cursor-pointer flex-col gap-3 bg-white p-3">
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
-                  {editImageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={editImageUrl}
-                      alt={editForm.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-6xl">🐰</span>
-                  )}
-                </div>
-                <div className="rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-3 text-center">
-                  <h2 className="line-clamp-2 text-xl font-bold leading-tight text-[#FF85A1]">
-                    {editForm.name}
-                  </h2>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
-                    <span>Qty {editForm.quantity}</span>
-                    <span className="truncate">{editForm.category}</span>
-                  </div>
-                  <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
-                    {editForm.notes ? (
-                      <p className="line-clamp-4">{editForm.notes}</p>
-                    ) : (
-                      <p className="text-zinc-400">No notes</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
           </form>
         </div>
       )}
