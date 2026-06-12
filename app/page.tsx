@@ -11,23 +11,12 @@ import {
   useState,
 } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Item, ItemCategory, ItemStore } from '@/types/item'
-
-const categories: ItemCategory[] = [
-  'Stationery',
-  'Mugs & Drinkware',
-  'Plush & Figures',
-  'Kitchen',
-  'Baby & Nursery',
-  'Home Decor',
-  'Other',
-]
+import type { Item, ItemStore } from '@/types/item'
 
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 
 interface EditForm {
   name: string
-  category: ItemCategory
   store: ItemStore
   quantity: string
   notes: string
@@ -38,7 +27,6 @@ interface EditForm {
 
 const emptyEditForm: EditForm = {
   name: '',
-  category: 'Stationery',
   store: 'Other',
   quantity: '1',
   notes: '',
@@ -113,7 +101,6 @@ export default function Home() {
   function getFormFromItem(item: Item): EditForm {
     return {
       name: item.name || '',
-      category: item.category || 'Stationery',
       store: item.store || 'Other',
       quantity: String(item.quantity || 1),
       notes: item.notes || '',
@@ -228,7 +215,6 @@ export default function Home() {
 
     const updatedItem: Partial<Item> = {
       name: editForm.name.trim(),
-      category: editForm.category,
       store: editForm.store,
       quantity: Number(editForm.quantity) || 1,
       notes: editForm.notes.trim() || undefined,
@@ -281,7 +267,7 @@ export default function Home() {
           </div>
         ) : (
           <section
-            className={`relative overflow-hidden transition-all duration-300 ease-out ${
+            className={`relative overflow-hidden transition-[height] duration-300 ease-out ${
               expandedId ? 'h-[820px]' : 'h-[650px]'
             }`}
             onTouchStart={expandedId ? undefined : handleFanTouchStart}
@@ -300,10 +286,10 @@ export default function Home() {
                     setSelectedIndex(index)
                     openEditor(item)
                   }}
-                  className={`group absolute bottom-8 left-1/2 cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)] ${
+                  className={`group absolute bottom-8 left-1/2 w-[300px] cursor-pointer overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[height,opacity,box-shadow] duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)] ${
                     isEditingThisItem
-                      ? 'h-auto min-h-[700px] w-[300px]'
-                      : 'h-[460px] w-[300px]'
+                      ? 'h-[700px]'
+                      : 'h-[460px]'
                   }`}
                   style={{
                     ...getFanCardStyle(index),
@@ -379,23 +365,6 @@ export default function Home() {
                             placeholder="Name"
                             type="text"
                           />
-
-                          <select
-                            required
-                            value={editForm.category}
-                            onChange={(event) =>
-                              updateEditForm({
-                                category: event.target.value as ItemCategory,
-                              })
-                            }
-                            className="min-h-10 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
-                          >
-                            {categories.map((category) => (
-                              <option key={category} value={category}>
-                                {category}
-                              </option>
-                            ))}
-                          </select>
 
                           <input
                             value={editForm.quantity}
