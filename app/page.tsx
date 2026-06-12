@@ -54,13 +54,10 @@ export default function Home() {
   const [error, setError] = useState('')
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
-  const [expandedRect, setExpandedRect] = useState<DOMRect | null>(null)
-  const [isExpanded, setIsExpanded] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isImportingImage, setIsImportingImage] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchStartX = useRef(0)
 
   useEffect(() => {
@@ -102,7 +99,6 @@ export default function Home() {
   useEffect(() => {
     return () => {
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-      if (closeTimer.current) clearTimeout(closeTimer.current)
     }
   }, [editForm.previewUrl])
 
@@ -127,32 +123,24 @@ export default function Home() {
     }
   }
 
-  function openExpandedCard(item: Item, target: HTMLElement) {
-    if (closeTimer.current) clearTimeout(closeTimer.current)
+  function openExpandedCard(item: Item) {
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
 
     setError('')
     setEditingItem(item)
     setEditForm(getFormFromItem(item))
-    setExpandedRect(target.getBoundingClientRect())
-    setIsExpanded(false)
-    requestAnimationFrame(() => setIsExpanded(true))
   }
 
   function closeExpandedCard() {
     if (!editingItem) return
 
-    setIsExpanded(false)
-    closeTimer.current = setTimeout(() => {
-      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-      setEditingItem(null)
-      setEditForm(emptyEditForm)
-      setExpandedRect(null)
-      setError('')
-      setIsUploading(false)
-      setIsImportingImage(false)
-      setIsSaving(false)
-    }, 300)
+    if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+    setEditingItem(null)
+    setEditForm(emptyEditForm)
+    setError('')
+    setIsUploading(false)
+    setIsImportingImage(false)
+    setIsSaving(false)
   }
 
   function getCarouselCardStyle(index: number): CSSProperties {
@@ -181,18 +169,6 @@ export default function Home() {
       if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
       return Math.max(0, currentIndex - 1)
     })
-  }
-
-  function getExpandedCardStyle(): CSSProperties {
-    if (!expandedRect) return {}
-
-    return {
-      height: isExpanded ? '100%' : expandedRect.height,
-      left: isExpanded ? '50%' : expandedRect.left,
-      top: isExpanded ? 0 : expandedRect.top,
-      transform: isExpanded ? 'translateX(-50%)' : 'translate(0, 0)',
-      width: isExpanded ? '100%' : expandedRect.width,
-    }
   }
 
   async function handleImageUpload(file: File) {
@@ -329,7 +305,7 @@ export default function Home() {
     <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
       <div
         className={`mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5 ${
-          editingItem ? 'hidden' : ''
+          editingItem ? 'pointer-events-none opacity-0' : 'opacity-100'
         }`}
       >
         {error && !editingItem && (
@@ -356,13 +332,13 @@ export default function Home() {
             {items.map((item, index) => (
               <article
                 key={item.id}
-                onClick={(event) => {
+                onClick={() => {
                   if (index !== activeSelectedIndex) {
                     setSelectedIndex(index)
                     return
                   }
 
-                  openExpandedCard(item, event.currentTarget)
+                  openExpandedCard(item)
                 }}
                 className="group absolute left-1/2 top-1/2 h-[580px] w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
                 style={getCarouselCardStyle(index)}
@@ -406,15 +382,12 @@ export default function Home() {
 
       {editingItem && (
         <div
-          className={`fixed inset-0 z-50 bg-black/60 transition-opacity duration-300 ease-out ${
-            isExpanded ? 'opacity-100' : 'opacity-0'
-          }`}
+          className="fixed inset-0 z-50 bg-black/60"
           onClick={closeExpandedCard}
         >
           <form
             onSubmit={handleSaveChanges}
-            className="fixed max-w-[390px] overflow-hidden bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
-            style={getExpandedCardStyle()}
+            className="fixed inset-0 overflow-hidden bg-white"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex h-full flex-col">
@@ -561,15 +534,15 @@ export default function Home() {
         </div>
       )}
 
-      {!editingItem && (
-        <Link
-          href="/admin/add"
-          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
-          aria-label="Add new item"
-        >
-          +
-        </Link>
-      )}
+      <Link
+        href="/admin/add"
+        className={`fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200 ${
+          editingItem ? 'pointer-events-none opacity-0' : 'opacity-100'
+        }`}
+        aria-label="Add new item"
+      >
+        +
+      </Link>
     </main>
   )
 }
