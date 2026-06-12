@@ -321,31 +321,31 @@ export default function Home() {
               <article
                 key={item.id}
                 onClick={(event) => openExpandedCard(item, event.currentTarget)}
-                className="group h-[510px] w-[340px] cursor-pointer rounded-[16px] border-4 border-[#FFB7C5] bg-[#FFD6E0] p-2 shadow-[0_8px_24px_rgba(255,183,197,0.4)] transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-[0_14px_36px_rgba(255,183,197,0.55)] active:scale-105 active:shadow-[0_14px_36px_rgba(255,183,197,0.55)]"
+                className="group w-[340px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-200 ease-in-out hover:scale-105 hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:scale-105 active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
               >
-                <div className="flex h-full flex-col overflow-hidden rounded-[10px] border-2 border-[#FFD6E0] bg-white">
-                  <div className="m-2 mb-0 flex min-h-0 flex-[13] items-center justify-center overflow-hidden rounded-md bg-[#FFD6E0] p-1">
+                <div className="flex flex-col gap-3 bg-white">
+                  <div className="flex h-[240px] w-full items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={item.image_url}
                         alt={item.name}
-                        className="h-full w-full rounded-[4px] object-cover"
+                        className="h-full w-full object-cover"
                       />
                     ) : (
                       <span className="text-6xl">🐰</span>
                     )}
                   </div>
 
-                  <div className="mt-2 flex flex-[7] flex-col justify-start gap-2 border-t-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
+                  <div className="rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-2.5 text-center">
                     <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
                       {item.name}
                     </h2>
-                    <div className="flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
+                    <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
                       <span>Qty {item.quantity}</span>
                       <span className="truncate">{item.category}</span>
                     </div>
-                    <div className="min-h-0 overflow-hidden text-xs leading-5 text-zinc-500">
+                    <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
                       {item.notes ? (
                         <p className="line-clamp-4">{item.notes}</p>
                       ) : (
