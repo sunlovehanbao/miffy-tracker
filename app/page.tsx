@@ -162,7 +162,9 @@ export default function Home() {
     return {
       opacity: isSelected ? 1 : 0,
       pointerEvents: isSelected ? 'auto' : 'none',
-      transform: 'translate(-50%, -50%)',
+      transform: `translate(${
+        isSelected ? '-50%' : relativeIndex < 0 ? '-68%' : '-32%'
+      }, -50%) scale(${isSelected ? 1 : 0.98})`,
       zIndex: isSelected ? 100 : 0,
     }
   }
@@ -173,7 +175,7 @@ export default function Home() {
 
   function handleCarouselTouchEnd(event: TouchEvent<HTMLElement>) {
     const deltaX = event.changedTouches[0].clientX - touchStartX.current
-    if (Math.abs(deltaX) < 40) return
+    if (Math.abs(deltaX) <= 50) return
 
     setSelectedIndex((currentIndex) => {
       if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
@@ -185,11 +187,11 @@ export default function Home() {
     if (!expandedRect) return {}
 
     return {
-      height: isExpanded ? '100vh' : expandedRect.height,
+      height: isExpanded ? '100%' : expandedRect.height,
       left: isExpanded ? '50%' : expandedRect.left,
       top: isExpanded ? 0 : expandedRect.top,
       transform: isExpanded ? 'translateX(-50%)' : 'translate(0, 0)',
-      width: isExpanded ? 'min(390px, 100vw)' : expandedRect.width,
+      width: isExpanded ? '100%' : expandedRect.width,
     }
   }
 
@@ -325,7 +327,11 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
-      <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
+      <div
+        className={`mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5 ${
+          editingItem ? 'hidden' : ''
+        }`}
+      >
         {error && !editingItem && (
           <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -407,7 +413,7 @@ export default function Home() {
         >
           <form
             onSubmit={handleSaveChanges}
-            className="fixed overflow-hidden bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
+            className="fixed max-w-[390px] overflow-hidden bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
             style={getExpandedCardStyle()}
             onClick={(event) => event.stopPropagation()}
           >
@@ -555,13 +561,15 @@ export default function Home() {
         </div>
       )}
 
-      <Link
-        href="/admin/add"
-        className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
-        aria-label="Add new item"
-      >
-        +
-      </Link>
+      {!editingItem && (
+        <Link
+          href="/admin/add"
+          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
+          aria-label="Add new item"
+        >
+          +
+        </Link>
+      )}
     </main>
   )
 }
