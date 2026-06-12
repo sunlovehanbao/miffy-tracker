@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import {
@@ -55,41 +55,39 @@ export default function Home() {
   const [error, setError] = useState('')
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
-  const [expandedRect, setExpandedRect] = useState<DOMRect | null>(null)
-  const [isExpanded, setIsExpanded] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isImportingImage, setIsImportingImage] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [isEditMode, setIsEditMode] = useState(false)
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchStartX = useRef(0)
 
-  useEffect(() => {
-    async function loadItems() {
-      setIsLoading(true)
-      setError('')
+  async function loadItems(showLoading = false) {
+    if (showLoading) setIsLoading(true)
+    setError('')
 
-      const { data, error: fetchError } = await supabase
-        .from('items')
-        .select('*')
-        .order('created_at', { ascending: false })
+    const { data, error: fetchError } = await supabase
+      .from('items')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-      if (fetchError) {
-        setError(fetchError.message)
-      } else {
-        setItems((data || []) as Item[])
-      }
-
-      setIsLoading(false)
+    if (fetchError) {
+      setError(fetchError.message)
+    } else {
+      setItems((data || []) as Item[])
     }
 
-    loadItems()
+    if (showLoading) setIsLoading(false)
+  }
+
+  useEffect(() => {
+    loadItems(true)
+    // loadItems only uses stable React state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') closeExpandedCard()
+      if (event.key === 'Escape') closeEditor()
     }
 
     if (editingItem) window.addEventListener('keydown', handleKeyDown)
@@ -97,14 +95,13 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-    // closeExpandedCard reads the active form state when Escape is pressed.
+    // closeEditor reads the active form state when Escape is pressed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingItem])
 
   useEffect(() => {
     return () => {
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-      if (closeTimer.current) clearTimeout(closeTimer.current)
     }
   }, [editForm.previewUrl])
 
@@ -129,34 +126,24 @@ export default function Home() {
     }
   }
 
-  function openExpandedCard(item: Item, target: HTMLElement) {
-    if (closeTimer.current) clearTimeout(closeTimer.current)
+  function openEditor(item: Item) {
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
 
     setError('')
     setEditingItem(item)
     setEditForm(getFormFromItem(item))
-    setExpandedRect(target.getBoundingClientRect())
-    setIsEditMode(false)
-    setIsExpanded(false)
-    requestAnimationFrame(() => setIsExpanded(true))
   }
 
-  function closeExpandedCard() {
+  function closeEditor() {
     if (!editingItem) return
 
-    setIsExpanded(false)
-    closeTimer.current = setTimeout(() => {
-      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-      setEditingItem(null)
-      setEditForm(emptyEditForm)
-      setExpandedRect(null)
-      setError('')
-      setIsUploading(false)
-      setIsImportingImage(false)
-      setIsSaving(false)
-      setIsEditMode(false)
-    }, 300)
+    if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+    setEditingItem(null)
+    setEditForm(emptyEditForm)
+    setError('')
+    setIsUploading(false)
+    setIsImportingImage(false)
+    setIsSaving(false)
   }
 
   function getFanCardStyle(index: number): CSSProperties {
@@ -186,22 +173,6 @@ export default function Home() {
       if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
       return Math.max(0, currentIndex - 1)
     })
-  }
-
-  function getExpandedCardStyle(): CSSProperties {
-    if (!expandedRect) return {}
-
-    return {
-      height: isExpanded
-        ? 'min(600px, calc(100vh - 32px))'
-        : expandedRect.height,
-      left: isExpanded ? '50%' : expandedRect.left,
-      top: isExpanded ? '50%' : expandedRect.top,
-      transform: isExpanded ? 'translate(-50%, -50%)' : 'translate(0, 0)',
-      width: isExpanded
-        ? 'min(360px, calc(100vw - 32px))'
-        : expandedRect.width,
-    }
   }
 
   async function handleImageUpload(file: File) {
@@ -331,12 +302,16 @@ export default function Home() {
     setItems((currentItems) =>
       currentItems.map((item) => (item.id === savedItem.id ? savedItem : item)),
     )
-    closeExpandedCard()
+    closeEditor()
+    await loadItems()
   }
 
   return (
     <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
-      <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
+      <div
+        className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5"
+        style={{ display: editingItem ? 'none' : undefined }}
+      >
         {error && !editingItem && (
           <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -349,7 +324,7 @@ export default function Home() {
           </p>
         ) : items.length === 0 ? (
           <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
-            <div className="text-5xl">🐰</div>
+            <div className="text-5xl">馃惏</div>
             <p className="mt-4 text-lg font-medium">No items found</p>
           </div>
         ) : (
@@ -361,13 +336,13 @@ export default function Home() {
             {items.map((item, index) => (
               <article
                 key={item.id}
-                onClick={(event) => {
+                onClick={() => {
                   if (index !== activeSelectedIndex) {
                     setSelectedIndex(index)
                     return
                   }
 
-                  openExpandedCard(item, event.currentTarget)
+                  openEditor(item)
                 }}
                 className="group absolute bottom-8 left-1/2 h-[460px] w-[300px] cursor-pointer rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all duration-300 ease-out hover:shadow-[0_10px_24px_rgba(255,183,197,0.45)] active:shadow-[0_10px_24px_rgba(255,183,197,0.45)]"
                 style={getFanCardStyle(index)}
@@ -382,7 +357,7 @@ export default function Home() {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <span className="text-6xl">🐰</span>
+                      <span className="text-6xl">馃惏</span>
                     )}
                   </div>
 
@@ -410,26 +385,14 @@ export default function Home() {
       </div>
 
       {editingItem && (
-        <div
-          className={`fixed inset-0 z-50 bg-black/60 p-4 transition-opacity duration-300 ease-out ${
-            isExpanded ? 'opacity-100' : 'opacity-0'
-          }`}
-          onClick={closeExpandedCard}
+        <form
+          onSubmit={handleSaveChanges}
+          className="fixed bottom-0 left-0 right-0 top-0 z-[9999] overflow-y-auto bg-white"
         >
-          <form
-            onSubmit={handleSaveChanges}
-            className="fixed overflow-hidden rounded-[20px] border-[3px] border-[#FFD6E0] bg-white shadow-[0_30px_90px_rgba(255,150,180,0.45)] transition-all duration-300 ease-out"
-            style={getExpandedCardStyle()}
-            onClick={(event) => {
-              event.stopPropagation()
-              if (!isEditMode) setIsEditMode(true)
-            }}
-          >
-            {isEditMode ? (
-              <div className="flex h-full flex-col">
-              <div className="relative basis-[60%] border-b border-[#FFD6E0] bg-rose-50">
+          <div className="mx-auto flex min-h-screen w-full max-w-[390px] flex-col bg-white">
+              <div className="relative border-b border-[#FFD6E0] bg-rose-50">
                 <label
-                  className="flex h-full cursor-pointer items-center justify-center overflow-hidden"
+                  className="flex min-h-[340px] cursor-pointer items-center justify-center overflow-hidden"
                   onDragOver={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -459,11 +422,11 @@ export default function Home() {
                     <img
                       src={editImageUrl}
                       alt="Selected item preview"
-                      className="h-full w-full object-cover"
+                      className="h-full min-h-[340px] w-full object-cover"
                     />
                   ) : (
                     <div className="text-center">
-                      <div className="text-5xl">🐰</div>
+                      <div className="text-5xl">馃惏</div>
                       <p className="mt-2 text-sm font-medium text-zinc-700">
                         Click to upload an image
                       </p>
@@ -479,7 +442,7 @@ export default function Home() {
                       updateEditForm({ imageUrlInput: event.target.value })
                     }
                     onPaste={handleImageUrlPaste}
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="h-9 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
                     placeholder="Paste image URL"
                     type="url"
                   />
@@ -491,15 +454,15 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex min-h-0 basis-[40%] flex-col bg-white">
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
+              <div className="flex flex-1 flex-col bg-white">
+                <div className="flex-1 space-y-4 px-5 py-5">
                   <input
                     required
                     value={editForm.name}
                     onChange={(event) =>
                       updateEditForm({ name: event.target.value })
                     }
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
+                    className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
                     placeholder="Name"
                     type="text"
                   />
@@ -512,7 +475,7 @@ export default function Home() {
                         category: event.target.value as ItemCategory,
                       })
                     }
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
                   >
                     {categories.map((category) => (
                       <option key={category} value={category}>
@@ -526,7 +489,7 @@ export default function Home() {
                     onChange={(event) =>
                       updateEditForm({ store: event.target.value as ItemStore })
                     }
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
                   >
                     {stores.map((store) => (
                       <option key={store} value={store}>
@@ -540,7 +503,7 @@ export default function Home() {
                     onChange={(event) =>
                       updateEditForm({ quantity: event.target.value })
                     }
-                    className="h-8 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
                     min="1"
                     placeholder="Quantity"
                     type="number"
@@ -551,7 +514,7 @@ export default function Home() {
                     onChange={(event) =>
                       updateEditForm({ notes: event.target.value })
                     }
-                    className="h-14 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-sm outline-none"
+                    className="min-h-28 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
                     placeholder="Notes"
                   />
 
@@ -562,67 +525,36 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 border-t border-[#FFD6E0] px-5 py-3">
+                <div className="sticky bottom-0 grid grid-cols-2 gap-3 border-t border-[#FFD6E0] bg-white px-5 py-4">
                   <button
                     type="submit"
                     disabled={isSaving || isUploading || isImportingImage}
-                    className="min-h-11 rounded-md bg-[#FF8FB3] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+                    className="min-h-12 rounded-md bg-[#FF8FB3] px-4 py-2 text-base font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
                   >
                     {isSaving ? 'Saving...' : 'Save Changes'}
                   </button>
                   <button
                     type="button"
-                    onClick={closeExpandedCard}
-                    className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50"
+                    onClick={closeEditor}
+                    className="min-h-12 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-base font-semibold text-zinc-700 hover:bg-rose-50"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
               </div>
-            ) : (
-              <div className="flex h-full cursor-pointer flex-col gap-3 bg-white p-3">
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
-                  {editImageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={editImageUrl}
-                      alt={editForm.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-6xl">🐰</span>
-                  )}
-                </div>
-                <div className="rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-3 text-center">
-                  <h2 className="line-clamp-2 text-xl font-bold leading-tight text-[#FF85A1]">
-                    {editForm.name}
-                  </h2>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-sm font-semibold text-[#FF85A1]">
-                    <span>Qty {editForm.quantity}</span>
-                    <span className="truncate">{editForm.category}</span>
-                  </div>
-                  <div className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500">
-                    {editForm.notes ? (
-                      <p className="line-clamp-4">{editForm.notes}</p>
-                    ) : (
-                      <p className="text-zinc-400">No notes</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </form>
-        </div>
+        </form>
       )}
 
-      <Link
-        href="/admin/add"
-        className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
-        aria-label="Add new item"
-      >
-        +
-      </Link>
+      {!editingItem && (
+        <Link
+          href="/admin/add"
+          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
+          aria-label="Add new item"
+        >
+          +
+        </Link>
+      )}
     </main>
   )
 }
