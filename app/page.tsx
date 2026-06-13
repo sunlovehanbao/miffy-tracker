@@ -17,6 +17,7 @@ const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 const swipeThreshold = 50
 
 type Mode = 'fan' | 'selected' | 'editing'
+type PullStage = 'idle' | 'pulling'
 
 interface EditForm {
   name: string
@@ -46,6 +47,9 @@ export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
   const [isFlyingToSelected, setIsFlyingToSelected] = useState(false)
+  const [isSelectedEnterActive, setIsSelectedEnterActive] = useState(false)
+  const [pullingIndex, setPullingIndex] = useState<number | null>(null)
+  const [pullStage, setPullStage] = useState<PullStage>('idle')
   const [fanDragOffsetX, setFanDragOffsetX] = useState(0)
   const [isFanDragging, setIsFanDragging] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
@@ -53,8 +57,8 @@ export default function Home() {
   const [isSaving, setIsSaving] = useState(false)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
-  const touchStartTime = useRef(0)
   const flyTimer = useRef<number | null>(null)
+  const enterTimer = useRef<number | null>(null)
 
   const currentItem = items[currentIndex]
   const editImageUrl = editForm.previewUrl || editForm.imageUrl
@@ -91,6 +95,7 @@ export default function Home() {
     return () => {
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
       if (flyTimer.current) window.clearTimeout(flyTimer.current)
+      if (enterTimer.current) window.clearTimeout(enterTimer.current)
     }
   }, [editForm.previewUrl])
 
@@ -116,7 +121,6 @@ export default function Home() {
   function startTouch(event: TouchEvent<HTMLElement>) {
     touchStartX.current = event.touches[0].clientX
     touchStartY.current = event.touches[0].clientY
-    touchStartTime.current = Date.now()
 
     if (mode === 'fan') {
       setIsFanDragging(true)
@@ -143,11 +147,9 @@ export default function Home() {
     if (mode === 'editing') return
 
     const deltaX = event.changedTouches[0].clientX - touchStartX.current
-    const elapsed = Math.max(Date.now() - touchStartTime.current, 1)
-    const velocity = Math.abs(deltaX) / elapsed
 
     if (mode === 'fan') {
-      if (Math.abs(deltaX) > swipeThreshold || velocity > 0.45) {
+      if (Math.abs(deltaX) > swipeThreshold) {
         setCurrentIndex((index) => {
           if (items.length === 0) return 0
           return deltaX < 0
@@ -171,15 +173,33 @@ export default function Home() {
   }
 
   function handleFanCardClick(index: number) {
+    if (pullingIndex !== null) return
+
     if (highlightedIndex === index) {
       setCurrentIndex(index)
       setHighlightedIndex(null)
-      setIsFlyingToSelected(true)
-      setMode('selected')
       if (flyTimer.current) window.clearTimeout(flyTimer.current)
+      if (enterTimer.current) window.clearTimeout(enterTimer.current)
+
+      setPullingIndex(index)
+      setPullStage('pulling')
+
+      enterTimer.current = window.setTimeout(() => {
+        setMode('selected')
+        setPullingIndex(null)
+        setPullStage('idle')
+        setIsFlyingToSelected(true)
+        setIsSelectedEnterActive(false)
+
+        window.requestAnimationFrame(() => {
+          setIsSelectedEnterActive(true)
+        })
+      }, 300)
+
       flyTimer.current = window.setTimeout(() => {
         setIsFlyingToSelected(false)
-      }, 300)
+        setIsSelectedEnterActive(false)
+      }, 700)
       return
     }
 
@@ -210,8 +230,20 @@ export default function Home() {
     const x = -spreadWidth / 2 + 100 + slot * 60 + fanDragOffsetX
     const yArc = total > 1 ? -Math.sin(progress * Math.PI) * 24 : 0
     const isHighlighted = highlightedIndex === index
-    const yLift = isHighlighted ? -20 : 0
+    const isPulling = pullingIndex !== null && pullStage === 'pulling'
+    const isPulledCard = pullingIndex === index
+    const yLift = isHighlighted ? -30 : 0
     const angle = total > 1 ? -15 + progress * 15 : 0
+    const pullY = isPulling ? (isPulledCard ? '-100vh' : '100vh') : null
+    const transition = isFanDragging
+      ? 'none'
+      : isPulling
+        ? isPulledCard
+          ? 'transform 0.2s ease-in, box-shadow 0.2s ease-in'
+          : 'transform 0.3s ease-in, box-shadow 0.3s ease-in'
+        : isHighlighted
+          ? 'transform 0.2s ease-out, box-shadow 0.2s ease-out'
+          : 'transform 0.15s ease-out, box-shadow 0.15s ease-out'
 
     return {
       top: '50%',
@@ -219,16 +251,14 @@ export default function Home() {
       width: '200px',
       height: '300px',
       opacity: 1,
-      transform: `translateX(calc(-50% + ${x}px)) translateY(calc(-50% + ${
-        yArc + yLift
-      }px)) rotate(${angle}deg)`,
+      transform: `translateX(calc(-50% + ${x}px)) translateY(${
+        pullY || `calc(-50% + ${yArc + yLift}px)`
+      }) rotate(${angle}deg)`,
       transformOrigin: '50% 90%',
-      transition: isFanDragging
-        ? 'none'
-        : 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s ease-out',
-      zIndex: isHighlighted ? 300 : 100 + slot,
-      boxShadow: isHighlighted
-        ? '0 0 20px rgba(255,215,0,0.8)'
+      transition,
+      zIndex: isHighlighted || isPulledCard ? 300 : 100 + slot,
+      boxShadow: isHighlighted || isPulledCard
+        ? '0 0 25px rgba(255,215,0,0.9)'
         : '0 4px 12px rgba(255,183,197,0.3)',
     }
   }
@@ -236,15 +266,24 @@ export default function Home() {
   function getSelectedCardStyle(index: number): CSSProperties {
     const relativeIndex = index - currentIndex
     const isVisible = Math.abs(relativeIndex) <= 1
+    const isCurrent = relativeIndex === 0
+    const normalTransform = `translateX(calc(-50% + ${relativeIndex * 316}px)) translateY(-50%) scale(1)`
 
     return {
       top: '50%',
       left: '50%',
       width: '300px',
       minHeight: mode === 'editing' && relativeIndex === 0 ? '620px' : '450px',
-      opacity: relativeIndex === 0 ? 1 : 0.6,
+      opacity: isCurrent ? 1 : isFlyingToSelected ? 0 : 0.6,
       pointerEvents: isVisible ? 'auto' : 'none',
-      transform: `translateX(calc(-50% + ${relativeIndex * 316}px)) translateY(-50%)`,
+      transform:
+        isFlyingToSelected && isCurrent && !isSelectedEnterActive
+          ? 'translateX(-50%) translateY(-100vh) scale(0.5)'
+          : normalTransform,
+      transition:
+        isFlyingToSelected && isCurrent
+          ? 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease-out'
+          : undefined,
       zIndex: 20 - Math.abs(relativeIndex),
     }
   }
