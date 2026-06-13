@@ -163,7 +163,7 @@ export default function Home() {
     return {
       opacity: isVisible ? 1 : 0,
       pointerEvents: isVisible ? 'auto' : 'none',
-      transform: `translateX(calc(-50% + ${relativeIndex * 312}px)) translateY(${translateY})`,
+      transform: `translateX(calc(-50% + ${relativeIndex * 312}px)) translateY(calc(-50% + ${translateY}))`,
       zIndex: 20 - Math.abs(relativeIndex),
     }
   }
@@ -176,9 +176,9 @@ export default function Home() {
     return {
       opacity: 1,
       pointerEvents: 'auto',
-      transform: `translateX(calc(-50% + ${relativeIndex * 104}px)) translateY(${
+      transform: `translateX(calc(-50% + ${relativeIndex * 104}px)) translateY(calc(-50% + ${
         94 + distance * 10
-      }px) rotate(${relativeIndex * 8}deg)`,
+      }px)) rotate(${relativeIndex * 8}deg)`,
       transformOrigin: '50% 100%',
       zIndex: 100 - distance,
     }
@@ -209,6 +209,14 @@ export default function Home() {
     const absX = Math.abs(deltaX)
     const absY = Math.abs(deltaY)
 
+    if (isSpread) {
+      event.preventDefault()
+      if (absX > 8 || absY > 8) {
+        suppressNextClick.current = true
+      }
+      return
+    }
+
     if (!touchMode.current && (absX > 8 || absY > 8)) {
       touchMode.current =
         absX > absY ? 'horizontal' : deltaY < 0 ? 'vertical' : null
@@ -237,6 +245,20 @@ export default function Home() {
     const deltaY = event.changedTouches[0].clientY - touchStartY.current
     const absX = Math.abs(deltaX)
     const absY = Math.abs(deltaY)
+
+    if (isSpread && absX > swipeThreshold) {
+      suppressNextClick.current = true
+      setActiveIndex(
+        deltaX < 0
+          ? Math.min(items.length - 1, activeCardIndex + 1)
+          : Math.max(0, activeCardIndex - 1),
+      )
+      setIsSpread(false)
+      setDragOffsetY(0)
+      touchMode.current = null
+      touchedCardIndex.current = null
+      return
+    }
 
     if (absX > swipeThreshold && absX > absY) {
       suppressNextClick.current = true
@@ -522,7 +544,13 @@ export default function Home() {
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            style={{ touchAction: 'pan-y' }}
+            style={{
+              minHeight: '100vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              touchAction: 'pan-y',
+            }}
           >
             {items.map((item, index) => {
               const isActive = index === activeCardIndex
@@ -535,7 +563,7 @@ export default function Home() {
               return (
                 <article
                   key={item.id}
-                  className={`absolute left-1/2 top-6 w-[300px] overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[transform,opacity,min-height,box-shadow] duration-200 ease-out ${
+                  className={`absolute left-1/2 top-1/2 w-[300px] overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[transform,opacity,min-height,box-shadow] duration-200 ease-out ${
                     isActive ? 'cursor-pointer' : 'cursor-pointer'
                   } ${isExpanded ? 'min-h-[700px]' : 'min-h-[460px]'}`}
                   style={{
