@@ -52,7 +52,7 @@ export default function Home() {
   const [isSelectedEnterActive, setIsSelectedEnterActive] = useState(false)
   const [pullingIndex, setPullingIndex] = useState<number | null>(null)
   const [pullStage, setPullStage] = useState<PullStage>('idle')
-  const [fanTranslateX, setFanTranslateX] = useState(0)
+  const [cardRenderPositions, setCardRenderPositions] = useState<number[]>([])
   const [isFanInteracting, setIsFanInteracting] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
@@ -60,11 +60,13 @@ export default function Home() {
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
   const touchStartTime = useRef(0)
-  const touchStartTranslateX = useRef(0)
-  const currentTranslateX = useRef(0)
+  const cardPositions = useRef(items.map((_, index) => index * fanCardStep))
+  const cardVelocities = useRef(items.map(() => 0))
+  const isFanDragging = useRef(false)
   const velocity = useRef(0)
   const lastTouchX = useRef(0)
   const lastTouchTime = useRef(0)
+  const springFrame = useRef<number | null>(null)
   const inertiaFrame = useRef<number | null>(null)
   const suppressFanClick = useRef(false)
   const flyTimer = useRef<number | null>(null)
@@ -98,7 +100,11 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    updateCurrentIndexFromTranslate(currentTranslateX.current)
+    const nextPositions = getDefaultCardPositions(items.length)
+    cardPositions.current = nextPositions
+    cardVelocities.current = items.map(() => 0)
+    setCardRenderPositions(nextPositions)
+    updateCurrentIndexFromPositions(nextPositions)
   }, [items.length])
 
   useEffect(() => {
@@ -106,7 +112,7 @@ export default function Home() {
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
       if (flyTimer.current) window.clearTimeout(flyTimer.current)
       if (enterTimer.current) window.clearTimeout(enterTimer.current)
-      stopFanInertia()
+      stopFanMotion()
     }
   }, [editForm.previewUrl])
 
@@ -129,21 +135,100 @@ export default function Home() {
     setHighlightedIndex(null)
   }
 
-  function stopFanInertia() {
+  function getDefaultCardPositions(total = items.length) {
+    return Array.from({ length: total }, (_, index) => index * fanCardStep)
+  }
+
+  function ensureFanPositions() {
+    if (cardPositions.current.length !== items.length) {
+      cardPositions.current = getDefaultCardPositions(items.length)
+      cardVelocities.current = items.map(() => 0)
+      setCardRenderPositions([...cardPositions.current])
+    }
+  }
+
+  function renderFanPositions() {
+    setCardRenderPositions([...cardPositions.current])
+  }
+
+  function stopFanMotion() {
+    if (springFrame.current !== null) {
+      window.cancelAnimationFrame(springFrame.current)
+      springFrame.current = null
+    }
+
     if (inertiaFrame.current !== null) {
       window.cancelAnimationFrame(inertiaFrame.current)
       inertiaFrame.current = null
     }
   }
 
-  function updateCurrentIndexFromTranslate(translateX: number) {
-    if (items.length === 0) return
+  function applySpringChain() {
+    const spring = 0.15
+
+    for (let index = 1; index < cardPositions.current.length; index += 1) {
+      const delay = index * 0.08
+      const delayedSpring = spring / (1 + delay)
+      const targetPosition = cardPositions.current[index - 1] + fanCardStep
+      const springDelta =
+        (targetPosition - cardPositions.current[index]) * delayedSpring
+
+      cardPositions.current[index] += springDelta
+      cardVelocities.current[index] =
+        cardVelocities.current[index] * 0.92 + springDelta
+    }
+  }
+
+  function updateCurrentIndexFromPositions(
+    positions = cardPositions.current,
+  ) {
+    if (items.length === 0 || positions.length === 0) return
 
     const spreadWidth = fanCardWidth + Math.max(items.length - 1, 0) * fanCardStep
     const firstCardX = -spreadWidth / 2 + fanCardWidth / 2
-    const nextIndex = Math.round((-translateX - firstCardX) / fanCardStep)
+    let nearestIndex = 0
+    let nearestDistance = Infinity
 
-    setCurrentIndex(clampIndex(nextIndex, items.length))
+    positions.forEach((position, index) => {
+      const distance = Math.abs(firstCardX + position)
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearestIndex = index
+      }
+    })
+
+    setCurrentIndex(clampIndex(nearestIndex, items.length))
+  }
+
+  function scheduleSpringFrame() {
+    if (springFrame.current !== null) return
+
+    springFrame.current = window.requestAnimationFrame(function runSpring() {
+      applySpringChain()
+      renderFanPositions()
+      updateCurrentIndexFromPositions()
+
+      if (isFanDragging.current) {
+        springFrame.current = window.requestAnimationFrame(runSpring)
+        return
+      }
+
+      springFrame.current = null
+    })
+  }
+
+  function settleFanSpacing() {
+    const basePosition = cardPositions.current[0] || 0
+
+    cardPositions.current = items.map(
+      (_, index) => basePosition + index * fanCardStep,
+    )
+    cardVelocities.current = items.map(() => 0)
+    velocity.current = 0
+    setIsFanInteracting(false)
+    renderFanPositions()
+    updateCurrentIndexFromPositions()
   }
 
   function startTouch(event: TouchEvent<HTMLElement>) {
@@ -151,12 +236,14 @@ export default function Home() {
     touchStartY.current = event.touches[0].clientY
 
     if (mode === 'fan') {
-      stopFanInertia()
+      stopFanMotion()
+      ensureFanPositions()
+      isFanDragging.current = true
       touchStartTime.current = Date.now()
-      touchStartTranslateX.current = currentTranslateX.current
       lastTouchX.current = event.touches[0].clientX
       lastTouchTime.current = touchStartTime.current
       velocity.current = 0
+      cardVelocities.current = items.map(() => 0)
       setIsFanInteracting(true)
     }
   }
@@ -168,17 +255,17 @@ export default function Home() {
     if (mode === 'fan') {
       event.preventDefault()
       const now = Date.now()
-      const nextTranslateX =
-        touchStartTranslateX.current + event.touches[0].clientX - touchStartX.current
       const deltaX = event.touches[0].clientX - lastTouchX.current
       const deltaTime = Math.max(now - lastTouchTime.current, 1)
 
-      currentTranslateX.current = nextTranslateX
       velocity.current = (deltaX / deltaTime) * 16
+      cardPositions.current[0] += deltaX
+      cardVelocities.current[0] = velocity.current
       lastTouchX.current = event.touches[0].clientX
       lastTouchTime.current = now
-      setFanTranslateX(nextTranslateX)
-      updateCurrentIndexFromTranslate(nextTranslateX)
+      scheduleSpringFrame()
+      renderFanPositions()
+      updateCurrentIndexFromPositions()
 
       if (Math.abs(event.touches[0].clientX - touchStartX.current) > 6) {
         suppressFanClick.current = true
@@ -198,17 +285,23 @@ export default function Home() {
     const deltaX = event.changedTouches[0].clientX - touchStartX.current
 
     if (mode === 'fan') {
+      isFanDragging.current = false
+      if (springFrame.current !== null) {
+        window.cancelAnimationFrame(springFrame.current)
+        springFrame.current = null
+      }
       if (Math.abs(deltaX) > 6) suppressFanClick.current = true
       const runInertia = () => {
-        velocity.current *= 0.95
-        currentTranslateX.current += velocity.current
-        setFanTranslateX(currentTranslateX.current)
-        updateCurrentIndexFromTranslate(currentTranslateX.current)
+        velocity.current *= 0.92
+        cardVelocities.current[0] = velocity.current
+        cardPositions.current[0] += velocity.current
+        applySpringChain()
+        renderFanPositions()
+        updateCurrentIndexFromPositions()
 
         if (Math.abs(velocity.current) < 0.5) {
-          velocity.current = 0
-          setIsFanInteracting(false)
           inertiaFrame.current = null
+          settleFanSpacing()
           return
         }
 
@@ -218,7 +311,7 @@ export default function Home() {
       if (Math.abs(velocity.current) >= 0.5) {
         inertiaFrame.current = window.requestAnimationFrame(runInertia)
       } else {
-        setIsFanInteracting(false)
+        settleFanSpacing()
       }
 
       return
@@ -290,8 +383,8 @@ export default function Home() {
   function getFanCardStyle(index: number): CSSProperties {
     const total = items.length
     const spreadWidth = fanCardWidth + Math.max(total - 1, 0) * fanCardStep
-    const x =
-      -spreadWidth / 2 + fanCardWidth / 2 + index * fanCardStep + fanTranslateX
+    const cardPosition = cardRenderPositions[index] ?? index * fanCardStep
+    const x = -spreadWidth / 2 + fanCardWidth / 2 + cardPosition
     const centerIndex = (total - 1) / 2
     const maxDistance = Math.max(centerIndex, total - 1 - centerIndex, 1)
     const distanceFromCenter = Math.abs(index - centerIndex)
@@ -309,7 +402,7 @@ export default function Home() {
         : 'transform 0.3s ease-in, box-shadow 0.3s ease-in'
       : isHighlighted
         ? 'transform 0.2s ease-out, box-shadow 0.2s ease-out'
-        : 'transform 100ms ease-out, box-shadow 100ms ease-out'
+        : 'transform 0.35s cubic-bezier(0, 0, 0.2, 1), box-shadow 0.2s ease-out'
 
     return {
       top: '50%',
