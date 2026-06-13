@@ -1,6 +1,6 @@
 'use client'
 
-import { type ChangeEvent, type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -64,12 +64,6 @@ export default function AddItemPage() {
     }
   }
 
-  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (file) handleImageUpload(file)
-    event.target.value = ''
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
@@ -100,8 +94,17 @@ export default function AddItemPage() {
         onSubmit={handleSubmit}
         className="mx-auto w-full max-w-[390px] rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)]"
       >
-        <label
+        <div
+          role="button"
+          tabIndex={0}
           className="flex h-[320px] cursor-pointer items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50"
+          onClick={() => document.getElementById('fileInput')?.click()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              document.getElementById('fileInput')?.click()
+            }
+          }}
           onDragOver={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -120,11 +123,13 @@ export default function AddItemPage() {
           }}
         >
           <input
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleImageChange}
+            id="fileInput"
             type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) =>
+              e.target.files?.[0] && handleImageUpload(e.target.files[0])
+            }
           />
           {previewUrl || imageUrlInput ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -136,7 +141,7 @@ export default function AddItemPage() {
           ) : (
             <span className="text-7xl font-light text-[#FF8FB3]">+</span>
           )}
-        </label>
+        </div>
 
         {isUploading && (
           <p className="mt-2 text-center text-sm text-zinc-500">
