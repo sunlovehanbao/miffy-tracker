@@ -1,10 +1,17 @@
 'use client'
 
 import Link from 'next/link'
+import ReactCrop, {
+  centerCrop,
+  convertToPixelCrop,
+  type Crop,
+  type PixelCrop,
+} from 'react-image-crop'
 import {
   type ChangeEvent,
   type CSSProperties,
   type FormEvent,
+  type SyntheticEvent,
   type TouchEvent,
   useEffect,
   useRef,
@@ -47,11 +54,16 @@ export default function Home() {
   const [dragOffsetY, setDragOffsetY] = useState(0)
   const [flyingDeleteId, setFlyingDeleteId] = useState<string | null>(null)
   const [isDeleteAnimating, setIsDeleteAnimating] = useState(false)
+  const [crop, setCrop] = useState<Crop>()
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop>()
+  const [cropImageUrl, setCropImageUrl] = useState('')
+  const [cropMimeType, setCropMimeType] = useState('image/jpeg')
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
   const touchMode = useRef<TouchMode>(null)
   const suppressNextClick = useRef(false)
   const touchedCardIndex = useRef<number | null>(null)
+  const cropImageRef = useRef<HTMLImageElement>(null)
 
   const activeCardIndex =
     items.length > 0 ? Math.min(activeIndex, items.length - 1) : 0
@@ -93,6 +105,12 @@ export default function Home() {
     }
   }, [editForm.previewUrl])
 
+  useEffect(() => {
+    return () => {
+      if (cropImageUrl) URL.revokeObjectURL(cropImageUrl)
+    }
+  }, [cropImageUrl])
+
   function updateEditForm(fields: Partial<EditForm>) {
     setEditForm((currentForm) => ({ ...currentForm, ...fields }))
   }
@@ -114,8 +132,18 @@ export default function Home() {
     setEditForm(getFormFromItem(item))
   }
 
+  function closeCropper() {
+    if (cropImageUrl) URL.revokeObjectURL(cropImageUrl)
+    setCropImageUrl('')
+    setCrop(undefined)
+    setCompletedCrop(undefined)
+    setCropMimeType('image/jpeg')
+    setIsUploading(false)
+  }
+
   function closeEditor() {
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+    closeCropper()
     setExpandedId(null)
     setEditForm(emptyEditForm)
     setError('')
@@ -183,7 +211,14 @@ export default function Home() {
 
     if (!touchMode.current && (absX > 8 || absY > 8)) {
       touchMode.current =
-        deltaY < 0 && absY > absX * 1.2 ? 'vertical' : 'horizontal'
+        absX > absY ? 'horizontal' : deltaY < 0 ? 'vertical' : null
+    }
+
+    if (touchMode.current === 'horizontal') {
+      event.preventDefault()
+      suppressNextClick.current = true
+      setDragOffsetY(0)
+      return
     }
 
     if (touchMode.current === 'vertical') {
@@ -203,21 +238,34 @@ export default function Home() {
     const absX = Math.abs(deltaX)
     const absY = Math.abs(deltaY)
 
-    if (isSpread) {
-      if (deltaY <= -swipeThreshold && absY > absX) {
-        const index = touchedCardIndex.current ?? activeCardIndex
-        selectCard(index)
-        suppressNextClick.current = true
-      }
-
+    if (absX > swipeThreshold && absX > absY) {
+      suppressNextClick.current = true
+      const baseIndex =
+        isSpread && touchedCardIndex.current !== null
+          ? touchedCardIndex.current
+          : activeCardIndex
       setDragOffsetY(0)
       touchMode.current = null
       touchedCardIndex.current = null
+      setActiveIndex(
+        deltaX < 0
+          ? Math.min(items.length - 1, baseIndex + 1)
+          : Math.max(0, baseIndex - 1),
+      )
+      setIsSpread(false)
       return
     }
 
     if (touchMode.current === 'vertical' || (deltaY < 0 && absY > absX)) {
       suppressNextClick.current = true
+      if (isSpread) {
+        const index = touchedCardIndex.current ?? activeCardIndex
+        selectCard(index)
+        setDragOffsetY(0)
+        touchMode.current = null
+        touchedCardIndex.current = null
+        return
+      }
       if (deltaY <= -deleteSwipeThreshold) {
         handleSwipeUpDelete()
       } else {
@@ -229,17 +277,7 @@ export default function Home() {
 
     setDragOffsetY(0)
     touchMode.current = null
-
-    if (Math.abs(deltaX) < swipeThreshold) return
-
-    setActiveIndex((currentIndex) => {
-      const nextIndex =
-        deltaX < 0
-          ? Math.min(items.length - 1, currentIndex + 1)
-          : Math.max(0, currentIndex - 1)
-      return nextIndex
-    })
-    setIsSpread(true)
+    touchedCardIndex.current = null
   }
 
   function handleSwipeUpDelete() {
@@ -282,25 +320,117 @@ export default function Home() {
     }, 300)
   }
 
-  async function handleImageUpload(file: File) {
+  function handleImageUpload(file: File) {
     setError('')
-    setIsUploading(true)
 
     try {
       if (!allowedImageTypes.includes(file.type)) {
         throw new Error('Please upload a JPG, PNG, or WEBP image.')
       }
 
-      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      if (cropImageUrl) URL.revokeObjectURL(cropImageUrl)
+      setCropImageUrl(URL.createObjectURL(file))
+      setCropMimeType(file.type || 'image/jpeg')
+      setCrop(undefined)
+      setCompletedCrop(undefined)
+    } catch (uploadError) {
+      setError(
+        uploadError instanceof Error ? uploadError.message : 'Upload failed.',
+      )
+    }
+  }
 
-      const previewUrl = URL.createObjectURL(file)
-      const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (file) handleImageUpload(file)
+    event.target.value = ''
+  }
+
+  function handleCropImageLoad(event: SyntheticEvent<HTMLImageElement>) {
+    const { width, height } = event.currentTarget
+    const nextCrop = centerCrop(
+      {
+        unit: '%',
+        width: 82,
+        height: 82,
+      },
+      width,
+      height,
+    )
+
+    setCrop(nextCrop)
+    setCompletedCrop(convertToPixelCrop(nextCrop, width, height))
+  }
+
+  function getCroppedBlob(
+    image: HTMLImageElement,
+    pixelCrop: PixelCrop,
+    mimeType: string,
+  ) {
+    const canvas = document.createElement('canvas')
+    const scaleX = image.naturalWidth / image.width
+    const scaleY = image.naturalHeight / image.height
+    const cropWidth = Math.max(1, Math.round(pixelCrop.width * scaleX))
+    const cropHeight = Math.max(1, Math.round(pixelCrop.height * scaleY))
+
+    canvas.width = cropWidth
+    canvas.height = cropHeight
+
+    const context = canvas.getContext('2d')
+    if (!context) {
+      throw new Error('Could not crop image.')
+    }
+
+    context.drawImage(
+      image,
+      pixelCrop.x * scaleX,
+      pixelCrop.y * scaleY,
+      pixelCrop.width * scaleX,
+      pixelCrop.height * scaleY,
+      0,
+      0,
+      cropWidth,
+      cropHeight,
+    )
+
+    return new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('Could not crop image.'))
+          }
+        },
+        mimeType,
+        0.92,
+      )
+    })
+  }
+
+  async function confirmImageCrop() {
+    const image = cropImageRef.current
+    if (!image || !crop) return
+
+    const pixelCrop =
+      completedCrop || convertToPixelCrop(crop, image.width, image.height)
+
+    setError('')
+    setIsUploading(true)
+
+    try {
+      const croppedBlob = await getCroppedBlob(image, pixelCrop, cropMimeType)
+      const extension = cropMimeType.includes('png')
+        ? 'png'
+        : cropMimeType.includes('webp')
+          ? 'webp'
+          : 'jpg'
       const filePath = `${crypto.randomUUID()}.${extension}`
 
       const { error: uploadError } = await supabase.storage
         .from('item-images')
-        .upload(filePath, file, {
-          contentType: file.type,
+        .upload(filePath, croppedBlob, {
+          contentType: cropMimeType,
           upsert: false,
         })
 
@@ -310,10 +440,12 @@ export default function Home() {
         .from('item-images')
         .getPublicUrl(filePath)
 
+      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
       updateEditForm({
         imageUrl: data.publicUrl,
-        previewUrl,
+        previewUrl: URL.createObjectURL(croppedBlob),
       })
+      closeCropper()
     } catch (uploadError) {
       setError(
         uploadError instanceof Error ? uploadError.message : 'Upload failed.',
@@ -321,12 +453,6 @@ export default function Home() {
     } finally {
       setIsUploading(false)
     }
-  }
-
-  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (file) handleImageUpload(file)
-    event.target.value = ''
   }
 
   async function handleSaveChanges(event: FormEvent<HTMLFormElement>) {
@@ -396,6 +522,7 @@ export default function Home() {
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            style={{ touchAction: 'pan-y' }}
           >
             {items.map((item, index) => {
               const isActive = index === activeCardIndex
@@ -408,7 +535,7 @@ export default function Home() {
               return (
                 <article
                   key={item.id}
-                  className={`absolute left-1/2 top-6 w-[300px] overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[transform,opacity,min-height,box-shadow] duration-300 ease-out ${
+                  className={`absolute left-1/2 top-6 w-[300px] overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[transform,opacity,min-height,box-shadow] duration-200 ease-out ${
                     isActive ? 'cursor-pointer' : 'cursor-pointer'
                   } ${isExpanded ? 'min-h-[700px]' : 'min-h-[460px]'}`}
                   style={{
@@ -479,7 +606,6 @@ export default function Home() {
                         >
                           <input
                             accept="image/*"
-                            capture="environment"
                             className="hidden"
                             onChange={handleImageChange}
                             type="file"
@@ -585,6 +711,57 @@ export default function Home() {
           </section>
         )}
       </div>
+
+      {cropImageUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
+          onClick={closeCropper}
+          onTouchStart={(event) => event.stopPropagation()}
+          onTouchMove={(event) => event.stopPropagation()}
+          onTouchEnd={(event) => event.stopPropagation()}
+        >
+          <div
+            className="max-h-full w-full max-w-[390px] overflow-y-auto rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50 p-2">
+              <ReactCrop
+                crop={crop}
+                onChange={(_, percentCrop) => setCrop(percentCrop)}
+                onComplete={(pixelCrop) => setCompletedCrop(pixelCrop)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  ref={cropImageRef}
+                  src={cropImageUrl}
+                  alt="Crop selected item"
+                  className="max-h-[62vh] w-full object-contain"
+                  onLoad={handleCropImageLoad}
+                />
+              </ReactCrop>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={confirmImageCrop}
+                disabled={isUploading}
+                className="min-h-11 rounded-md bg-[#FF8FB3] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+              >
+                {isUploading ? 'Saving...' : 'Confirm Crop'}
+              </button>
+              <button
+                type="button"
+                onClick={closeCropper}
+                disabled={isUploading}
+                className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-zinc-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!expandedId && (
         <Link
