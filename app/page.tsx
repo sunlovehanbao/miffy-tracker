@@ -218,16 +218,12 @@ export default function Home() {
 
   function getFanCardStyle(index: number): CSSProperties {
     const total = items.length
-    const slot = total > 0 ? (index - currentIndex + total) % total : 0
-    const progress = total > 1 ? slot / (total - 1) : 1
-    const spreadWidth = 200 + Math.max(total - 1, 0) * 60
-    const x = -spreadWidth / 2 + 100 + slot * 60
-    const yArc = total > 1 ? -Math.sin(progress * Math.PI) * 24 : 0
+    const stackPosition = total > 0 ? (index - currentIndex + total) % total : 0
+    const stackOffset = stackPosition * 4
     const isHighlighted = highlightedIndex === index
     const isPulling = pullingIndex !== null && pullStage === 'pulling'
     const isPulledCard = pullingIndex === index
     const yLift = isHighlighted ? -30 : 0
-    const angle = total > 1 ? -15 + progress * 15 : 0
     const pullY = isPulling ? (isPulledCard ? '-100vh' : '100vh') : null
     const transition = isFanDragging
       ? 'none'
@@ -237,7 +233,7 @@ export default function Home() {
           : 'transform 0.3s ease-in, box-shadow 0.3s ease-in'
         : isHighlighted
           ? 'transform 0.2s ease-out, box-shadow 0.2s ease-out'
-          : 'transform 80ms ease-out, box-shadow 80ms ease-out'
+          : 'transform 100ms ease-out, box-shadow 100ms ease-out'
 
     return {
       top: '50%',
@@ -245,12 +241,12 @@ export default function Home() {
       width: '200px',
       height: '300px',
       opacity: 1,
-      transform: `translateX(calc(-50% + ${x}px)) translateY(${
-        pullY || `calc(-50% + ${yArc + yLift}px)`
-      }) rotate(${angle}deg)`,
-      transformOrigin: '50% 90%',
+      transform: `translateX(calc(-50% + ${stackOffset}px)) translateY(${
+        pullY || `calc(-50% + ${stackOffset + yLift}px)`
+      }) rotate(0deg)`,
+      transformOrigin: '50% 50%',
       transition,
-      zIndex: isHighlighted || isPulledCard ? 300 : 100 + slot,
+      zIndex: isHighlighted || isPulledCard ? 300 : 200 - stackPosition,
       boxShadow: isHighlighted || isPulledCard
         ? '0 0 25px rgba(255,215,0,0.9)'
         : '0 4px 12px rgba(255,183,197,0.3)',
