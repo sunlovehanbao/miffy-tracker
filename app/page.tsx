@@ -46,11 +46,14 @@ export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
   const [isFlyingToSelected, setIsFlyingToSelected] = useState(false)
+  const [fanDragOffsetX, setFanDragOffsetX] = useState(0)
+  const [isFanDragging, setIsFanDragging] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
+  const touchStartTime = useRef(0)
   const flyTimer = useRef<number | null>(null)
 
   const currentItem = items[currentIndex]
@@ -113,13 +116,25 @@ export default function Home() {
   function startTouch(event: TouchEvent<HTMLElement>) {
     touchStartX.current = event.touches[0].clientX
     touchStartY.current = event.touches[0].clientY
+    touchStartTime.current = Date.now()
+
+    if (mode === 'fan') {
+      setIsFanDragging(true)
+      setFanDragOffsetX(0)
+    }
   }
 
   function preventScrollDuringSwipe(event: TouchEvent<HTMLElement>) {
     const deltaX = event.touches[0].clientX - touchStartX.current
     const deltaY = event.touches[0].clientY - touchStartY.current
 
-    if (mode === 'fan' || Math.abs(deltaX) > Math.abs(deltaY)) {
+    if (mode === 'fan') {
+      event.preventDefault()
+      setFanDragOffsetX(deltaX)
+      return
+    }
+
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
       event.preventDefault()
     }
   }
@@ -128,6 +143,25 @@ export default function Home() {
     if (mode === 'editing') return
 
     const deltaX = event.changedTouches[0].clientX - touchStartX.current
+    const elapsed = Math.max(Date.now() - touchStartTime.current, 1)
+    const velocity = Math.abs(deltaX) / elapsed
+
+    if (mode === 'fan') {
+      if (Math.abs(deltaX) > swipeThreshold || velocity > 0.45) {
+        setCurrentIndex((index) => {
+          if (items.length === 0) return 0
+          return deltaX < 0
+            ? (index + 1) % items.length
+            : (index - 1 + items.length) % items.length
+        })
+        setHighlightedIndex(null)
+      }
+
+      setFanDragOffsetX(0)
+      setIsFanDragging(false)
+      return
+    }
+
     if (Math.abs(deltaX) <= swipeThreshold) return
 
     moveCurrentIndex(deltaX < 0 ? 1 : -1)
@@ -169,22 +203,30 @@ export default function Home() {
   }
 
   function getFanCardStyle(index: number): CSSProperties {
-    const relativeIndex = index - currentIndex
-    const distance = Math.abs(relativeIndex)
+    const total = items.length
+    const slot = total > 0 ? (index - currentIndex + total) % total : 0
+    const progress = total > 1 ? slot / (total - 1) : 1
+    const spreadWidth = 200 + Math.max(total - 1, 0) * 60
+    const x = -spreadWidth / 2 + 100 + slot * 60 + fanDragOffsetX
+    const yArc = total > 1 ? -Math.sin(progress * Math.PI) * 24 : 0
     const isHighlighted = highlightedIndex === index
     const yLift = isHighlighted ? -20 : 0
+    const angle = total > 1 ? -15 + progress * 15 : 0
 
     return {
-      bottom: '18px',
+      top: '50%',
       left: '50%',
       width: '200px',
       height: '300px',
       opacity: 1,
-      transform: `translateX(calc(-50% + ${relativeIndex * 68}px)) translateY(${
-        yLift - distance * 5
-      }px) rotate(${relativeIndex * 8}deg)`,
-      transformOrigin: '50% 100%',
-      zIndex: isHighlighted ? 200 : 100 - distance,
+      transform: `translateX(calc(-50% + ${x}px)) translateY(calc(-50% + ${
+        yArc + yLift
+      }px)) rotate(${angle}deg)`,
+      transformOrigin: '50% 90%',
+      transition: isFanDragging
+        ? 'none'
+        : 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s ease-out',
+      zIndex: isHighlighted ? 300 : 100 + slot,
       boxShadow: isHighlighted
         ? '0 0 20px rgba(255,215,0,0.8)'
         : '0 4px 12px rgba(255,183,197,0.3)',
