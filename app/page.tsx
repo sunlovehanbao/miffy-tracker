@@ -50,7 +50,6 @@ export default function Home() {
   const [isSelectedEnterActive, setIsSelectedEnterActive] = useState(false)
   const [pullingIndex, setPullingIndex] = useState<number | null>(null)
   const [pullStage, setPullStage] = useState<PullStage>('idle')
-  const [fanDragOffsetX, setFanDragOffsetX] = useState(0)
   const [isFanDragging, setIsFanDragging] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
@@ -124,7 +123,6 @@ export default function Home() {
 
     if (mode === 'fan') {
       setIsFanDragging(true)
-      setFanDragOffsetX(0)
     }
   }
 
@@ -134,7 +132,6 @@ export default function Home() {
 
     if (mode === 'fan') {
       event.preventDefault()
-      setFanDragOffsetX(deltaX)
       return
     }
 
@@ -152,14 +149,11 @@ export default function Home() {
       if (Math.abs(deltaX) > swipeThreshold) {
         setCurrentIndex((index) => {
           if (items.length === 0) return 0
-          return deltaX < 0
-            ? (index + 1) % items.length
-            : (index - 1 + items.length) % items.length
+          return clampIndex(index + (deltaX < 0 ? 1 : -1), items.length)
         })
         setHighlightedIndex(null)
       }
 
-      setFanDragOffsetX(0)
       setIsFanDragging(false)
       return
     }
@@ -227,7 +221,7 @@ export default function Home() {
     const slot = total > 0 ? (index - currentIndex + total) % total : 0
     const progress = total > 1 ? slot / (total - 1) : 1
     const spreadWidth = 200 + Math.max(total - 1, 0) * 60
-    const x = -spreadWidth / 2 + 100 + slot * 60 + fanDragOffsetX
+    const x = -spreadWidth / 2 + 100 + slot * 60
     const yArc = total > 1 ? -Math.sin(progress * Math.PI) * 24 : 0
     const isHighlighted = highlightedIndex === index
     const isPulling = pullingIndex !== null && pullStage === 'pulling'
@@ -243,7 +237,7 @@ export default function Home() {
           : 'transform 0.3s ease-in, box-shadow 0.3s ease-in'
         : isHighlighted
           ? 'transform 0.2s ease-out, box-shadow 0.2s ease-out'
-          : 'transform 0.15s ease-out, box-shadow 0.15s ease-out'
+          : 'transform 80ms ease-out, box-shadow 80ms ease-out'
 
     return {
       top: '50%',
