@@ -50,12 +50,12 @@ export default function Home() {
   const [isSelectedEnterActive, setIsSelectedEnterActive] = useState(false)
   const [pullingIndex, setPullingIndex] = useState<number | null>(null)
   const [pullStage, setPullStage] = useState<PullStage>('idle')
-  const [isFanDragging, setIsFanDragging] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
+  const suppressFanClick = useRef(false)
   const flyTimer = useRef<number | null>(null)
   const enterTimer = useRef<number | null>(null)
 
@@ -121,9 +121,7 @@ export default function Home() {
     touchStartX.current = event.touches[0].clientX
     touchStartY.current = event.touches[0].clientY
 
-    if (mode === 'fan') {
-      setIsFanDragging(true)
-    }
+    if (mode === 'fan') return
   }
 
   function preventScrollDuringSwipe(event: TouchEvent<HTMLElement>) {
@@ -152,9 +150,8 @@ export default function Home() {
           return clampIndex(index + (deltaX < 0 ? 1 : -1), items.length)
         })
         setHighlightedIndex(null)
+        suppressFanClick.current = true
       }
-
-      setIsFanDragging(false)
       return
     }
 
@@ -168,6 +165,10 @@ export default function Home() {
 
   function handleFanCardClick(index: number) {
     if (pullingIndex !== null) return
+    if (suppressFanClick.current) {
+      suppressFanClick.current = false
+      return
+    }
 
     if (highlightedIndex === index) {
       setCurrentIndex(index)
@@ -197,6 +198,7 @@ export default function Home() {
       return
     }
 
+    setCurrentIndex(index)
     setHighlightedIndex(index)
   }
 
@@ -219,27 +221,25 @@ export default function Home() {
   function getFanCardStyle(index: number): CSSProperties {
     const total = items.length
     const cardWidth = 200
-    const cardStep = 180
+    const cardStep = 30
     const spreadWidth = cardWidth + Math.max(total - 1, 0) * cardStep
     const x = -spreadWidth / 2 + cardWidth / 2 + index * cardStep
     const centerIndex = (total - 1) / 2
     const maxDistance = Math.max(centerIndex, total - 1 - centerIndex, 1)
     const distanceFromCenter = Math.abs(index - centerIndex)
-    const yArc = (distanceFromCenter / maxDistance) * 14
+    const yArc = (distanceFromCenter / maxDistance) * 10
     const isHighlighted = highlightedIndex === index
     const isPulling = pullingIndex !== null && pullStage === 'pulling'
     const isPulledCard = pullingIndex === index
     const yLift = isHighlighted ? -40 : 0
     const pullY = isPulling ? (isPulledCard ? '-100vh' : '100vh') : null
-    const transition = isFanDragging
-      ? 'none'
-      : isPulling
-        ? isPulledCard
-          ? 'transform 0.2s ease-in, box-shadow 0.2s ease-in'
-          : 'transform 0.3s ease-in, box-shadow 0.3s ease-in'
-        : isHighlighted
-          ? 'transform 0.2s ease-out, box-shadow 0.2s ease-out'
-          : 'transform 100ms ease-out, box-shadow 100ms ease-out'
+    const transition = isPulling
+      ? isPulledCard
+        ? 'transform 0.2s ease-in, box-shadow 0.2s ease-in'
+        : 'transform 0.3s ease-in, box-shadow 0.3s ease-in'
+      : isHighlighted
+        ? 'transform 0.2s ease-out, box-shadow 0.2s ease-out'
+        : 'transform 100ms ease-out, box-shadow 100ms ease-out'
 
     return {
       top: '50%',
@@ -518,6 +518,9 @@ export default function Home() {
     <main
       className="relative h-screen w-screen overflow-hidden bg-[#f5f5f5] text-zinc-950"
       style={{ touchAction: 'none' }}
+      onTouchStart={startTouch}
+      onTouchMove={preventScrollDuringSwipe}
+      onTouchEnd={endSwipe}
     >
       {error && (
         <p className="absolute left-4 right-4 top-4 z-50 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -542,9 +545,6 @@ export default function Home() {
               setHighlightedIndex(null)
             }
           }}
-          onTouchStart={startTouch}
-          onTouchMove={preventScrollDuringSwipe}
-          onTouchEnd={endSwipe}
         >
           {mode === 'fan' &&
             items.map((item, index) => (
