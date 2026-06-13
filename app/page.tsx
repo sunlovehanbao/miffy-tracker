@@ -225,8 +225,8 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f5f5] text-zinc-950">
-      <div className="mx-auto min-h-screen w-full max-w-[390px] bg-white px-4 py-5">
+    <main className="min-h-screen overflow-x-hidden bg-[#f5f5f5] text-zinc-950">
+      <div className="mx-auto min-h-screen w-full max-w-[390px] overflow-hidden bg-white px-4 py-5">
         {error && (
           <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -244,7 +244,7 @@ export default function Home() {
           </div>
         ) : (
           <section
-            className={`relative overflow-hidden transition-[min-height] duration-300 ease-out ${
+            className={`relative overflow-hidden overflow-x-hidden transition-[min-height] duration-300 ease-out ${
               expandedId ? 'min-h-[760px]' : 'min-h-[560px]'
             }`}
             onTouchStart={handleTouchStart}
@@ -268,6 +268,7 @@ export default function Home() {
                       : isSideCard
                         ? 0.6
                         : getCardStyle(index).opacity,
+                    willChange: 'transform',
                   }}
                   onClick={() => {
                     if (expandedId) return
