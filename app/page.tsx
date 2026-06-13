@@ -1,17 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import ReactCrop, {
-  centerCrop,
-  convertToPixelCrop,
-  type Crop,
-  type PixelCrop,
-} from 'react-image-crop'
 import {
   type ChangeEvent,
   type CSSProperties,
   type FormEvent,
-  type SyntheticEvent,
   type TouchEvent,
   useEffect,
   useRef,
@@ -22,8 +15,8 @@ import type { Item } from '@/types/item'
 
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 const swipeThreshold = 50
-const deleteSwipeThreshold = 100
-type TouchMode = 'horizontal' | 'vertical' | null
+
+type Mode = 'fan' | 'selected' | 'editing'
 
 interface EditForm {
   name: string
@@ -41,32 +34,26 @@ const emptyEditForm: EditForm = {
   previewUrl: '',
 }
 
+function clampIndex(index: number, total: number) {
+  return Math.min(Math.max(index, 0), Math.max(total - 1, 0))
+}
+
 export default function Home() {
   const [items, setItems] = useState<Item[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeIndex, setActiveIndex] = useState(0)
-  const [isSpread, setIsSpread] = useState(true)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [mode, setMode] = useState<Mode>('fan')
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null)
+  const [isFlyingToSelected, setIsFlyingToSelected] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [dragOffsetY, setDragOffsetY] = useState(0)
-  const [flyingDeleteId, setFlyingDeleteId] = useState<string | null>(null)
-  const [isDeleteAnimating, setIsDeleteAnimating] = useState(false)
-  const [crop, setCrop] = useState<Crop>()
-  const [completedCrop, setCompletedCrop] = useState<PixelCrop>()
-  const [cropImageUrl, setCropImageUrl] = useState('')
-  const [cropMimeType, setCropMimeType] = useState('image/jpeg')
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
-  const touchMode = useRef<TouchMode>(null)
-  const suppressNextClick = useRef(false)
-  const touchedCardIndex = useRef<number | null>(null)
-  const cropImageRef = useRef<HTMLImageElement>(null)
+  const flyTimer = useRef<number | null>(null)
 
-  const activeCardIndex =
-    items.length > 0 ? Math.min(activeIndex, items.length - 1) : 0
+  const currentItem = items[currentIndex]
   const editImageUrl = editForm.previewUrl || editForm.imageUrl
 
   async function loadItems(showLoading = false) {
@@ -94,22 +81,15 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (activeIndex > items.length - 1) {
-      setActiveIndex(Math.max(items.length - 1, 0))
-    }
-  }, [activeIndex, items.length])
+    setCurrentIndex((index) => clampIndex(index, items.length))
+  }, [items.length])
 
   useEffect(() => {
     return () => {
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      if (flyTimer.current) window.clearTimeout(flyTimer.current)
     }
   }, [editForm.previewUrl])
-
-  useEffect(() => {
-    return () => {
-      if (cropImageUrl) URL.revokeObjectURL(cropImageUrl)
-    }
-  }, [cropImageUrl])
 
   function updateEditForm(fields: Partial<EditForm>) {
     setEditForm((currentForm) => ({ ...currentForm, ...fields }))
@@ -125,334 +105,126 @@ export default function Home() {
     }
   }
 
+  function moveCurrentIndex(direction: 1 | -1) {
+    setCurrentIndex((index) => clampIndex(index + direction, items.length))
+    setHighlightedIndex(null)
+  }
+
+  function startTouch(event: TouchEvent<HTMLElement>) {
+    touchStartX.current = event.touches[0].clientX
+    touchStartY.current = event.touches[0].clientY
+  }
+
+  function preventScrollDuringSwipe(event: TouchEvent<HTMLElement>) {
+    const deltaX = event.touches[0].clientX - touchStartX.current
+    const deltaY = event.touches[0].clientY - touchStartY.current
+
+    if (mode === 'fan' || Math.abs(deltaX) > Math.abs(deltaY)) {
+      event.preventDefault()
+    }
+  }
+
+  function endSwipe(event: TouchEvent<HTMLElement>) {
+    if (mode === 'editing') return
+
+    const deltaX = event.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(deltaX) <= swipeThreshold) return
+
+    moveCurrentIndex(deltaX < 0 ? 1 : -1)
+    if (mode === 'selected') {
+      setMode('selected')
+    }
+  }
+
+  function handleFanCardClick(index: number) {
+    if (highlightedIndex === index) {
+      setCurrentIndex(index)
+      setHighlightedIndex(null)
+      setIsFlyingToSelected(true)
+      setMode('selected')
+      if (flyTimer.current) window.clearTimeout(flyTimer.current)
+      flyTimer.current = window.setTimeout(() => {
+        setIsFlyingToSelected(false)
+      }, 300)
+      return
+    }
+
+    setHighlightedIndex(index)
+  }
+
   function openEditor(item: Item) {
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-    setError('')
-    setExpandedId(item.id)
     setEditForm(getFormFromItem(item))
+    setError('')
+    setMode('editing')
   }
 
-  function closeCropper() {
-    if (cropImageUrl) URL.revokeObjectURL(cropImageUrl)
-    setCropImageUrl('')
-    setCrop(undefined)
-    setCompletedCrop(undefined)
-    setCropMimeType('image/jpeg')
-    setIsUploading(false)
-  }
-
-  function closeEditor() {
+  function cancelEdit() {
     if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
-    closeCropper()
-    setExpandedId(null)
     setEditForm(emptyEditForm)
     setError('')
     setIsUploading(false)
     setIsSaving(false)
+    setMode('selected')
   }
 
-  function getCardStyle(index: number): CSSProperties {
-    const relativeIndex = index - activeCardIndex
-    const isVisible = Math.abs(relativeIndex) <= 1
-    const item = items[index]
-    const isActive = index === activeCardIndex
-    const flyAway = Boolean(item && flyingDeleteId === item.id)
-    const activeDragY = isActive ? dragOffsetY : 0
-    const translateY = flyAway ? '-100vh' : `${activeDragY}px`
+  function getFanCardStyle(index: number): CSSProperties {
+    const relativeIndex = index - currentIndex
+    const distance = Math.abs(relativeIndex)
+    const isHighlighted = highlightedIndex === index
+    const yLift = isHighlighted ? -20 : 0
 
     return {
-      opacity: isVisible ? 1 : 0,
+      bottom: '18px',
+      left: '50%',
+      width: '200px',
+      height: '300px',
+      opacity: 1,
+      transform: `translateX(calc(-50% + ${relativeIndex * 68}px)) translateY(${
+        yLift - distance * 5
+      }px) rotate(${relativeIndex * 8}deg)`,
+      transformOrigin: '50% 100%',
+      zIndex: isHighlighted ? 200 : 100 - distance,
+      boxShadow: isHighlighted
+        ? '0 0 20px rgba(255,215,0,0.8)'
+        : '0 4px 12px rgba(255,183,197,0.3)',
+    }
+  }
+
+  function getSelectedCardStyle(index: number): CSSProperties {
+    const relativeIndex = index - currentIndex
+    const isVisible = Math.abs(relativeIndex) <= 1
+
+    return {
+      top: '50%',
+      left: '50%',
+      width: '300px',
+      minHeight: mode === 'editing' && relativeIndex === 0 ? '620px' : '450px',
+      opacity: relativeIndex === 0 ? 1 : 0.6,
       pointerEvents: isVisible ? 'auto' : 'none',
-      transform: `translateX(calc(-50% + ${relativeIndex * 312}px)) translateY(calc(-50% + ${translateY}))`,
+      transform: `translateX(calc(-50% + ${relativeIndex * 316}px)) translateY(-50%)`,
       zIndex: 20 - Math.abs(relativeIndex),
     }
   }
 
-  function getFanSpreadStyle(index: number): CSSProperties {
-    const centerIndex = (items.length - 1) / 2
-    const relativeIndex = index - centerIndex
-    const distance = Math.abs(relativeIndex)
-
-    return {
-      opacity: 1,
-      pointerEvents: 'auto',
-      transform: `translateX(calc(-50% + ${relativeIndex * 104}px)) translateY(calc(-50% + ${
-        94 + distance * 10
-      }px)) rotate(${relativeIndex * 8}deg)`,
-      transformOrigin: '50% 100%',
-      zIndex: 100 - distance,
-    }
-  }
-
-  function selectCard(index: number) {
-    setActiveIndex(index)
-    setIsSpread(false)
-    setDragOffsetY(0)
-    touchMode.current = null
-  }
-
-  function handleTouchStart(event: TouchEvent<HTMLElement>) {
-    touchStartX.current = event.touches[0].clientX
-    touchStartY.current = event.touches[0].clientY
-    touchMode.current = null
-
-    if (!expandedId && !isDeleteAnimating) {
-      setDragOffsetY(0)
-    }
-  }
-
-  function handleTouchMove(event: TouchEvent<HTMLElement>) {
-    if (expandedId || isDeleteAnimating) return
-
-    const deltaX = event.touches[0].clientX - touchStartX.current
-    const deltaY = event.touches[0].clientY - touchStartY.current
-    const absX = Math.abs(deltaX)
-    const absY = Math.abs(deltaY)
-
-    if (isSpread) {
-      event.preventDefault()
-      if (absX > 8 || absY > 8) {
-        suppressNextClick.current = true
-      }
-      return
-    }
-
-    if (!touchMode.current && (absX > 8 || absY > 8)) {
-      touchMode.current =
-        absX > absY ? 'horizontal' : deltaY < 0 ? 'vertical' : null
-    }
-
-    if (touchMode.current === 'horizontal') {
-      event.preventDefault()
-      suppressNextClick.current = true
-      setDragOffsetY(0)
-      return
-    }
-
-    if (touchMode.current === 'vertical') {
-      event.preventDefault()
-      suppressNextClick.current = true
-      if (!isSpread) {
-        setDragOffsetY(Math.min(0, deltaY))
-      }
-    }
-  }
-
-  function handleTouchEnd(event: TouchEvent<HTMLElement>) {
-    if (expandedId || isDeleteAnimating) return
-
-    const deltaX = event.changedTouches[0].clientX - touchStartX.current
-    const deltaY = event.changedTouches[0].clientY - touchStartY.current
-    const absX = Math.abs(deltaX)
-    const absY = Math.abs(deltaY)
-
-    if (isSpread && absX > swipeThreshold) {
-      suppressNextClick.current = true
-      setActiveIndex(
-        deltaX < 0
-          ? Math.min(items.length - 1, activeCardIndex + 1)
-          : Math.max(0, activeCardIndex - 1),
-      )
-      setIsSpread(false)
-      setDragOffsetY(0)
-      touchMode.current = null
-      touchedCardIndex.current = null
-      return
-    }
-
-    if (absX > swipeThreshold && absX > absY) {
-      suppressNextClick.current = true
-      const baseIndex =
-        isSpread && touchedCardIndex.current !== null
-          ? touchedCardIndex.current
-          : activeCardIndex
-      setDragOffsetY(0)
-      touchMode.current = null
-      touchedCardIndex.current = null
-      setActiveIndex(
-        deltaX < 0
-          ? Math.min(items.length - 1, baseIndex + 1)
-          : Math.max(0, baseIndex - 1),
-      )
-      setIsSpread(false)
-      return
-    }
-
-    if (touchMode.current === 'vertical' || (deltaY < 0 && absY > absX)) {
-      suppressNextClick.current = true
-      if (isSpread) {
-        const index = touchedCardIndex.current ?? activeCardIndex
-        selectCard(index)
-        setDragOffsetY(0)
-        touchMode.current = null
-        touchedCardIndex.current = null
-        return
-      }
-      if (deltaY <= -deleteSwipeThreshold) {
-        handleSwipeUpDelete()
-      } else {
-        setDragOffsetY(0)
-      }
-      touchMode.current = null
-      return
-    }
-
-    setDragOffsetY(0)
-    touchMode.current = null
-    touchedCardIndex.current = null
-  }
-
-  function handleSwipeUpDelete() {
-    const item = items[activeCardIndex]
-    if (!item) {
-      setDragOffsetY(0)
-      return
-    }
-
-    setIsDeleteAnimating(true)
-    setFlyingDeleteId(item.id)
-
-    window.setTimeout(async () => {
-      const confirmed = window.confirm('Delete this item?')
-
-      if (!confirmed) {
-        setFlyingDeleteId(null)
-        setDragOffsetY(0)
-        setIsDeleteAnimating(false)
-        return
-      }
-
-      const { error: deleteError } = await supabase
-        .from('items')
-        .delete()
-        .eq('id', item.id)
-
-      if (deleteError) {
-        setError(deleteError.message)
-        setFlyingDeleteId(null)
-        setDragOffsetY(0)
-        setIsDeleteAnimating(false)
-        return
-      }
-
-      setFlyingDeleteId(null)
-      setDragOffsetY(0)
-      setIsDeleteAnimating(false)
-      await loadItems()
-    }, 300)
-  }
-
-  function handleImageUpload(file: File) {
+  async function handleImageUpload(file: File) {
     setError('')
+    setIsUploading(true)
 
     try {
       if (!allowedImageTypes.includes(file.type)) {
         throw new Error('Please upload a JPG, PNG, or WEBP image.')
       }
 
-      if (cropImageUrl) URL.revokeObjectURL(cropImageUrl)
-      setCropImageUrl(URL.createObjectURL(file))
-      setCropMimeType(file.type || 'image/jpeg')
-      setCrop(undefined)
-      setCompletedCrop(undefined)
-    } catch (uploadError) {
-      setError(
-        uploadError instanceof Error ? uploadError.message : 'Upload failed.',
-      )
-    }
-  }
-
-  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (file) handleImageUpload(file)
-    event.target.value = ''
-  }
-
-  function handleCropImageLoad(event: SyntheticEvent<HTMLImageElement>) {
-    const { width, height } = event.currentTarget
-    const nextCrop = centerCrop(
-      {
-        unit: '%',
-        width: 82,
-        height: 82,
-      },
-      width,
-      height,
-    )
-
-    setCrop(nextCrop)
-    setCompletedCrop(convertToPixelCrop(nextCrop, width, height))
-  }
-
-  function getCroppedBlob(
-    image: HTMLImageElement,
-    pixelCrop: PixelCrop,
-    mimeType: string,
-  ) {
-    const canvas = document.createElement('canvas')
-    const scaleX = image.naturalWidth / image.width
-    const scaleY = image.naturalHeight / image.height
-    const cropWidth = Math.max(1, Math.round(pixelCrop.width * scaleX))
-    const cropHeight = Math.max(1, Math.round(pixelCrop.height * scaleY))
-
-    canvas.width = cropWidth
-    canvas.height = cropHeight
-
-    const context = canvas.getContext('2d')
-    if (!context) {
-      throw new Error('Could not crop image.')
-    }
-
-    context.drawImage(
-      image,
-      pixelCrop.x * scaleX,
-      pixelCrop.y * scaleY,
-      pixelCrop.width * scaleX,
-      pixelCrop.height * scaleY,
-      0,
-      0,
-      cropWidth,
-      cropHeight,
-    )
-
-    return new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(blob)
-          } else {
-            reject(new Error('Could not crop image.'))
-          }
-        },
-        mimeType,
-        0.92,
-      )
-    })
-  }
-
-  async function confirmImageCrop() {
-    const image = cropImageRef.current
-    if (!image || !crop) return
-
-    const pixelCrop =
-      completedCrop || convertToPixelCrop(crop, image.width, image.height)
-
-    setError('')
-    setIsUploading(true)
-
-    try {
-      const croppedBlob = await getCroppedBlob(image, pixelCrop, cropMimeType)
-      const extension = cropMimeType.includes('png')
-        ? 'png'
-        : cropMimeType.includes('webp')
-          ? 'webp'
-          : 'jpg'
+      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+      const previewUrl = URL.createObjectURL(file)
+      const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
       const filePath = `${crypto.randomUUID()}.${extension}`
 
       const { error: uploadError } = await supabase.storage
         .from('item-images')
-        .upload(filePath, croppedBlob, {
-          contentType: cropMimeType,
+        .upload(filePath, file, {
+          contentType: file.type,
           upsert: false,
         })
 
@@ -462,12 +234,10 @@ export default function Home() {
         .from('item-images')
         .getPublicUrl(filePath)
 
-      if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
       updateEditForm({
         imageUrl: data.publicUrl,
-        previewUrl: URL.createObjectURL(croppedBlob),
+        previewUrl,
       })
-      closeCropper()
     } catch (uploadError) {
       setError(
         uploadError instanceof Error ? uploadError.message : 'Upload failed.',
@@ -477,9 +247,16 @@ export default function Home() {
     }
   }
 
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (file) handleImageUpload(file)
+    event.target.value = ''
+  }
+
   async function handleSaveChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!expandedId) return
+    const item = items[currentIndex]
+    if (!item) return
 
     setError('')
     setIsSaving(true)
@@ -494,7 +271,7 @@ export default function Home() {
     const { data, error: updateError } = await supabase
       .from('items')
       .update(updates)
-      .eq('id', expandedId)
+      .eq('id', item.id)
       .select('*')
       .single()
 
@@ -507,299 +284,247 @@ export default function Home() {
 
     const savedItem = data as Item
     setItems((currentItems) =>
-      currentItems.map((item) => (item.id === savedItem.id ? savedItem : item)),
+      currentItems.map((currentItem) =>
+        currentItem.id === savedItem.id ? savedItem : currentItem,
+      ),
     )
-    closeEditor()
-    await loadItems()
+    if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
+    setEditForm(emptyEditForm)
+    setMode('selected')
+  }
+
+  function renderCardContent(item: Item, compact = false) {
+    return (
+      <div className="flex h-full flex-col gap-2">
+        <div
+          className={`flex items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50 ${
+            compact ? 'h-[190px]' : 'h-[300px]'
+          }`}
+        >
+          {item.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.image_url}
+              alt={item.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className={compact ? 'text-4xl text-[#FF8FB3]' : 'text-6xl text-[#FF8FB3]'}>
+              +
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-1 flex-col items-center justify-center rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-3 text-center">
+          <h2
+            className={`line-clamp-2 font-bold leading-tight text-[#FF85A1] ${
+              compact ? 'text-sm' : 'text-lg'
+            }`}
+          >
+            {item.name}
+          </h2>
+          <p
+            className={`mt-2 font-semibold text-[#FF85A1] ${
+              compact ? 'text-xs' : 'text-sm'
+            }`}
+          >
+            Qty {item.quantity}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  function renderEditCard(item: Item) {
+    return (
+      <form
+        onSubmit={handleSaveChanges}
+        className="flex h-full flex-col gap-2"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <label
+          className="relative flex h-[300px] cursor-pointer items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50"
+          onDragOver={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onDragEnter={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            const file = event.dataTransfer.files?.[0]
+            if (file && allowedImageTypes.includes(file.type)) {
+              handleImageUpload(file)
+            }
+          }}
+        >
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageChange}
+          />
+          {editImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={editImageUrl}
+              alt={item.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="text-6xl text-[#FF8FB3]">+</span>
+          )}
+          {isUploading && (
+            <span className="absolute bottom-3 rounded-md bg-white/90 px-3 py-1 text-xs text-zinc-500 shadow-sm">
+              Uploading...
+            </span>
+          )}
+        </label>
+
+        <div className="flex flex-1 flex-col rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7]">
+          <div className="flex-1 space-y-4 px-4 py-4">
+            <input
+              required
+              value={editForm.name}
+              onChange={(event) => updateEditForm({ name: event.target.value })}
+              className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
+              placeholder="Name"
+              type="text"
+            />
+
+            <input
+              value={editForm.quantity}
+              onChange={(event) =>
+                updateEditForm({ quantity: event.target.value })
+              }
+              className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
+              min="1"
+              placeholder="Quantity"
+              type="number"
+            />
+
+            <textarea
+              value={editForm.notes}
+              onChange={(event) =>
+                updateEditForm({ notes: event.target.value })
+              }
+              className="min-h-24 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
+              placeholder="Notes"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 border-t border-[#FFD6E0] bg-white px-4 py-3">
+            <button
+              type="submit"
+              disabled={isSaving || isUploading}
+              className="min-h-11 rounded-md bg-[#FF8FB3] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </form>
+    )
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#f5f5f5] text-zinc-950">
-      <div className="mx-auto min-h-screen w-full max-w-[390px] overflow-hidden bg-white px-4 py-5">
-        {error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        )}
+    <main
+      className="relative h-screen w-screen overflow-hidden bg-[#f5f5f5] text-zinc-950"
+      style={{ touchAction: 'none' }}
+    >
+      {error && (
+        <p className="absolute left-4 right-4 top-4 z-50 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
 
-        {isLoading ? (
-          <p className="mt-10 text-center text-sm text-zinc-500">
-            Loading collection...
-          </p>
-        ) : items.length === 0 ? (
-          <div className="mt-10 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
-            <div className="text-5xl">🐰</div>
-            <p className="mt-4 text-lg font-medium">No items found</p>
-          </div>
-        ) : (
-          <section
-            className={`relative overflow-hidden overflow-x-hidden transition-[min-height] duration-300 ease-out ${
-              expandedId ? 'min-h-[760px]' : 'min-h-[560px]'
-            }`}
-            onClick={() => {
-              if (!isSpread && !expandedId) {
-                setIsSpread(true)
-              }
-            }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            style={{
-              minHeight: '100vh',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              touchAction: 'pan-y',
-            }}
-          >
-            {items.map((item, index) => {
-              const isActive = index === activeCardIndex
-              const isExpanded = expandedId === item.id
-              const isSideCard = Math.abs(index - activeCardIndex) === 1
-              const cardStyle = isSpread
-                ? getFanSpreadStyle(index)
-                : getCardStyle(index)
+      {isLoading ? (
+        <p className="absolute left-0 right-0 top-1/2 -translate-y-1/2 text-center text-sm text-zinc-500">
+          Loading collection...
+        </p>
+      ) : items.length === 0 ? (
+        <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
+          <p className="text-lg font-medium">No items found</p>
+        </div>
+      ) : (
+        <section
+          className="absolute inset-0 overflow-hidden"
+          onClick={() => {
+            if (mode === 'selected') {
+              setMode('fan')
+              setHighlightedIndex(null)
+            }
+          }}
+          onTouchStart={startTouch}
+          onTouchMove={preventScrollDuringSwipe}
+          onTouchEnd={endSwipe}
+        >
+          {mode === 'fan' &&
+            items.map((item, index) => (
+              <article
+                key={item.id}
+                className="absolute overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-2 transition-all duration-200 ease-out"
+                style={getFanCardStyle(index)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleFanCardClick(index)
+                }}
+              >
+                {renderCardContent(item, true)}
+              </article>
+            ))}
+
+          {(mode === 'selected' || mode === 'editing') &&
+            items.map((item, index) => {
+              const relativeIndex = index - currentIndex
+              const isVisible = Math.abs(relativeIndex) <= 1
+              const isCurrent = index === currentIndex
+
+              if (!isVisible) return null
 
               return (
                 <article
                   key={item.id}
-                  className={`absolute left-1/2 top-1/2 w-[300px] overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-[transform,opacity,min-height,box-shadow] duration-200 ease-out ${
-                    isActive ? 'cursor-pointer' : 'cursor-pointer'
-                  } ${isExpanded ? 'min-h-[700px]' : 'min-h-[460px]'}`}
-                  style={{
-                    ...cardStyle,
-                    opacity: isSpread
-                      ? 1
-                      : isExpanded
-                        ? 1
-                        : expandedId
-                          ? 0.4
-                          : !isActive
-                            ? 0.3
-                            : isSideCard
-                              ? 0.6
-                              : cardStyle.opacity,
-                    transitionDuration:
-                      isActive && dragOffsetY !== 0 && !flyingDeleteId
-                        ? '0ms'
-                        : undefined,
-                    willChange: 'transform',
-                  }}
-                  onTouchStart={() => {
-                    touchedCardIndex.current = index
-                  }}
+                  className={`absolute overflow-hidden rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-[0_4px_12px_rgba(255,183,197,0.3)] transition-all ease-out ${
+                    isFlyingToSelected ? 'duration-300' : 'duration-200'
+                  }`}
+                  style={getSelectedCardStyle(index)}
                   onClick={(event) => {
                     event.stopPropagation()
-                    if (suppressNextClick.current) {
-                      suppressNextClick.current = false
-                      return
-                    }
-                    if (expandedId) return
-                    if (isSpread) {
-                      selectCard(index)
-                      return
-                    }
-                    if (!isActive) {
-                      setActiveIndex(index)
+                    if (mode === 'editing') return
+                    if (!isCurrent) {
+                      setCurrentIndex(index)
                       return
                     }
                     openEditor(item)
                   }}
                 >
-                  {isExpanded ? (
-                    <form
-                      className="flex min-h-[674px] flex-col gap-3"
-                      onClick={(event) => event.stopPropagation()}
-                      onSubmit={handleSaveChanges}
-                    >
-                      <div className="relative flex h-[320px] items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
-                        <label
-                          className="flex h-full w-full cursor-pointer items-center justify-center overflow-hidden"
-                          onDragOver={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                          }}
-                          onDragEnter={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                          }}
-                          onDrop={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            const file = event.dataTransfer.files?.[0]
-                            if (file && allowedImageTypes.includes(file.type)) {
-                              handleImageUpload(file)
-                            }
-                          }}
-                        >
-                          <input
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleImageChange}
-                            type="file"
-                          />
-                          {editImageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={editImageUrl}
-                              alt="Selected item preview"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-6xl">🐰</span>
-                          )}
-                        </label>
-                        {isUploading && (
-                          <p className="absolute bottom-3 rounded-md bg-white/90 px-3 py-1 text-xs text-zinc-500 shadow-sm">
-                            Uploading image...
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex flex-1 flex-col rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7]">
-                        <div className="flex-1 space-y-4 px-4 py-4">
-                          <input
-                            required
-                            value={editForm.name}
-                            onChange={(event) =>
-                              updateEditForm({ name: event.target.value })
-                            }
-                            className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base font-semibold outline-none"
-                            placeholder="Name"
-                            type="text"
-                          />
-
-                          <input
-                            value={editForm.quantity}
-                            onChange={(event) =>
-                              updateEditForm({ quantity: event.target.value })
-                            }
-                            className="min-h-11 w-full border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
-                            min="1"
-                            placeholder="Quantity"
-                            type="number"
-                          />
-
-                          <textarea
-                            value={editForm.notes}
-                            onChange={(event) =>
-                              updateEditForm({ notes: event.target.value })
-                            }
-                            className="min-h-28 w-full resize-none border-0 border-b border-[#FFD6E0] bg-transparent px-0 text-base outline-none"
-                            placeholder="Notes"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 border-t border-[#FFD6E0] bg-white px-4 py-3">
-                          <button
-                            type="submit"
-                            disabled={isSaving || isUploading}
-                            className="min-h-11 rounded-md bg-[#FF8FB3] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
-                          >
-                            {isSaving ? 'Saving...' : 'Save'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={closeEditor}
-                            className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-                  ) : (
-                    <div className="flex h-full min-h-[434px] flex-col gap-3">
-                      <div className="flex h-[300px] items-center justify-center overflow-hidden rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50">
-                        {item.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={item.image_url}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-6xl">🐰</span>
-                        )}
-                      </div>
-
-                      <div className="min-h-[120px] rounded-[12px] border-2 border-[#FFD6E0] bg-[#FFF5F7] px-3 py-3 text-center">
-                        <h2 className="line-clamp-2 text-lg font-bold leading-tight text-[#FF85A1]">
-                          {item.name}
-                        </h2>
-                        <p className="mt-2 text-sm font-semibold text-[#FF85A1]">
-                          Qty {item.quantity}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {mode === 'editing' && isCurrent
+                    ? renderEditCard(item)
+                    : renderCardContent(item)}
                 </article>
               )
             })}
-          </section>
-        )}
-      </div>
-
-      {cropImageUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6"
-          onClick={closeCropper}
-          onTouchStart={(event) => event.stopPropagation()}
-          onTouchMove={(event) => event.stopPropagation()}
-          onTouchEnd={(event) => event.stopPropagation()}
-        >
-          <div
-            className="max-h-full w-full max-w-[390px] overflow-y-auto rounded-[16px] border-2 border-[#FFD6E0] bg-white p-3 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="rounded-[12px] border-2 border-[#FFD6E0] bg-rose-50 p-2">
-              <ReactCrop
-                crop={crop}
-                onChange={(_, percentCrop) => setCrop(percentCrop)}
-                onComplete={(pixelCrop) => setCompletedCrop(pixelCrop)}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  ref={cropImageRef}
-                  src={cropImageUrl}
-                  alt="Crop selected item"
-                  className="max-h-[62vh] w-full object-contain"
-                  onLoad={handleCropImageLoad}
-                />
-              </ReactCrop>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={confirmImageCrop}
-                disabled={isUploading}
-                className="min-h-11 rounded-md bg-[#FF8FB3] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
-              >
-                {isUploading ? 'Saving...' : 'Confirm Crop'}
-              </button>
-              <button
-                type="button"
-                onClick={closeCropper}
-                disabled={isUploading}
-                className="min-h-11 rounded-md border border-[#FFD6E0] bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-zinc-300"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        </section>
       )}
 
-      {!expandedId && (
-        <Link
-          href="/admin/add"
-          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
-          aria-label="Add new item"
-        >
-          +
-        </Link>
-      )}
+      <Link
+        href="/admin/add"
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-3xl font-light text-white shadow-lg transition hover:bg-rose-600 focus:outline-none focus:ring-4 focus:ring-rose-200"
+        aria-label="Add new item"
+      >
+        +
+      </Link>
     </main>
   )
 }
