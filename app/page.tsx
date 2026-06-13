@@ -15,6 +15,8 @@ import type { Item } from '@/types/item'
 
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 const swipeThreshold = 50
+const deleteSwipeThreshold = 100
+type TouchMode = 'horizontal' | 'vertical' | null
 
 interface EditForm {
   name: string
@@ -41,7 +43,13 @@ export default function Home() {
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [dragOffsetY, setDragOffsetY] = useState(0)
+  const [flyingDeleteId, setFlyingDeleteId] = useState<string | null>(null)
+  const [isDeleteAnimating, setIsDeleteAnimating] = useState(false)
   const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
+  const touchMode = useRef<TouchMode>(null)
+  const suppressNextClick = useRef(false)
 
   const activeCardIndex =
     items.length > 0 ? Math.min(activeIndex, items.length - 1) : 0
@@ -116,29 +124,118 @@ export default function Home() {
   function getCardStyle(index: number): CSSProperties {
     const relativeIndex = index - activeCardIndex
     const isVisible = Math.abs(relativeIndex) <= 1
+    const item = items[index]
+    const isActive = index === activeCardIndex
+    const flyAway = Boolean(item && flyingDeleteId === item.id)
+    const activeDragY = isActive ? dragOffsetY : 0
+    const translateY = flyAway ? '-100vh' : `${activeDragY}px`
 
     return {
       opacity: isVisible ? 1 : 0,
       pointerEvents: isVisible ? 'auto' : 'none',
-      transform: `translateX(calc(-50% + ${relativeIndex * 312}px))`,
+      transform: `translateX(calc(-50% + ${relativeIndex * 312}px)) translateY(${translateY})`,
       zIndex: 20 - Math.abs(relativeIndex),
     }
   }
 
   function handleTouchStart(event: TouchEvent<HTMLElement>) {
     touchStartX.current = event.touches[0].clientX
+    touchStartY.current = event.touches[0].clientY
+    touchMode.current = null
+
+    if (!expandedId && !isDeleteAnimating) {
+      setDragOffsetY(0)
+    }
+  }
+
+  function handleTouchMove(event: TouchEvent<HTMLElement>) {
+    if (expandedId || isDeleteAnimating) return
+
+    const deltaX = event.touches[0].clientX - touchStartX.current
+    const deltaY = event.touches[0].clientY - touchStartY.current
+    const absX = Math.abs(deltaX)
+    const absY = Math.abs(deltaY)
+
+    if (!touchMode.current && (absX > 8 || absY > 8)) {
+      touchMode.current =
+        deltaY < 0 && absY > absX * 1.2 ? 'vertical' : 'horizontal'
+    }
+
+    if (touchMode.current === 'vertical') {
+      event.preventDefault()
+      suppressNextClick.current = true
+      setDragOffsetY(Math.min(0, deltaY))
+    }
   }
 
   function handleTouchEnd(event: TouchEvent<HTMLElement>) {
-    if (expandedId) return
+    if (expandedId || isDeleteAnimating) return
 
     const deltaX = event.changedTouches[0].clientX - touchStartX.current
+    const deltaY = event.changedTouches[0].clientY - touchStartY.current
+    const absX = Math.abs(deltaX)
+    const absY = Math.abs(deltaY)
+
+    if (touchMode.current === 'vertical' || (deltaY < 0 && absY > absX)) {
+      suppressNextClick.current = true
+      if (deltaY <= -deleteSwipeThreshold) {
+        handleSwipeUpDelete()
+      } else {
+        setDragOffsetY(0)
+      }
+      touchMode.current = null
+      return
+    }
+
+    setDragOffsetY(0)
+    touchMode.current = null
+
     if (Math.abs(deltaX) < swipeThreshold) return
 
     setActiveIndex((currentIndex) => {
       if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
       return Math.max(0, currentIndex - 1)
     })
+  }
+
+  function handleSwipeUpDelete() {
+    const item = items[activeCardIndex]
+    if (!item) {
+      setDragOffsetY(0)
+      return
+    }
+
+    setIsDeleteAnimating(true)
+    setFlyingDeleteId(item.id)
+
+    window.setTimeout(async () => {
+      const confirmed = window.confirm('Delete this item?')
+
+      if (!confirmed) {
+        setFlyingDeleteId(null)
+        setDragOffsetY(0)
+        setIsDeleteAnimating(false)
+        return
+      }
+
+      const { error: deleteError } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', item.id)
+
+      if (deleteError) {
+        setError(deleteError.message)
+        setFlyingDeleteId(null)
+        setDragOffsetY(0)
+        setIsDeleteAnimating(false)
+        return
+      }
+
+      setFlyingDeleteId(null)
+      setDragOffsetY(0)
+      setIsDeleteAnimating(false)
+      await loadItems()
+    }, 300)
   }
 
   async function handleImageUpload(file: File) {
@@ -248,6 +345,7 @@ export default function Home() {
               expandedId ? 'min-h-[760px]' : 'min-h-[560px]'
             }`}
             onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
             {items.map((item, index) => {
@@ -268,9 +366,17 @@ export default function Home() {
                       : isSideCard
                         ? 0.6
                         : getCardStyle(index).opacity,
+                    transitionDuration:
+                      isActive && dragOffsetY !== 0 && !flyingDeleteId
+                        ? '0ms'
+                        : undefined,
                     willChange: 'transform',
                   }}
                   onClick={() => {
+                    if (suppressNextClick.current) {
+                      suppressNextClick.current = false
+                      return
+                    }
                     if (expandedId) return
                     if (!isActive) {
                       setActiveIndex(index)
