@@ -15,6 +15,8 @@ import type { Item } from '@/types/item'
 
 const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp']
 const swipeThreshold = 50
+const fanCardWidth = 200
+const fanCardStep = 30
 
 type Mode = 'fan' | 'selected' | 'editing'
 type PullStage = 'idle' | 'pulling'
@@ -50,11 +52,20 @@ export default function Home() {
   const [isSelectedEnterActive, setIsSelectedEnterActive] = useState(false)
   const [pullingIndex, setPullingIndex] = useState<number | null>(null)
   const [pullStage, setPullStage] = useState<PullStage>('idle')
+  const [fanTranslateX, setFanTranslateX] = useState(0)
+  const [isFanInteracting, setIsFanInteracting] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
+  const touchStartTime = useRef(0)
+  const touchStartTranslateX = useRef(0)
+  const currentTranslateX = useRef(0)
+  const velocity = useRef(0)
+  const lastTouchX = useRef(0)
+  const lastTouchTime = useRef(0)
+  const inertiaFrame = useRef<number | null>(null)
   const suppressFanClick = useRef(false)
   const flyTimer = useRef<number | null>(null)
   const enterTimer = useRef<number | null>(null)
@@ -87,7 +98,7 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    setCurrentIndex((index) => clampIndex(index, items.length))
+    updateCurrentIndexFromTranslate(currentTranslateX.current)
   }, [items.length])
 
   useEffect(() => {
@@ -95,6 +106,7 @@ export default function Home() {
       if (editForm.previewUrl) URL.revokeObjectURL(editForm.previewUrl)
       if (flyTimer.current) window.clearTimeout(flyTimer.current)
       if (enterTimer.current) window.clearTimeout(enterTimer.current)
+      stopFanInertia()
     }
   }, [editForm.previewUrl])
 
@@ -117,11 +129,36 @@ export default function Home() {
     setHighlightedIndex(null)
   }
 
+  function stopFanInertia() {
+    if (inertiaFrame.current !== null) {
+      window.cancelAnimationFrame(inertiaFrame.current)
+      inertiaFrame.current = null
+    }
+  }
+
+  function updateCurrentIndexFromTranslate(translateX: number) {
+    if (items.length === 0) return
+
+    const spreadWidth = fanCardWidth + Math.max(items.length - 1, 0) * fanCardStep
+    const firstCardX = -spreadWidth / 2 + fanCardWidth / 2
+    const nextIndex = Math.round((-translateX - firstCardX) / fanCardStep)
+
+    setCurrentIndex(clampIndex(nextIndex, items.length))
+  }
+
   function startTouch(event: TouchEvent<HTMLElement>) {
     touchStartX.current = event.touches[0].clientX
     touchStartY.current = event.touches[0].clientY
 
-    if (mode === 'fan') return
+    if (mode === 'fan') {
+      stopFanInertia()
+      touchStartTime.current = Date.now()
+      touchStartTranslateX.current = currentTranslateX.current
+      lastTouchX.current = event.touches[0].clientX
+      lastTouchTime.current = touchStartTime.current
+      velocity.current = 0
+      setIsFanInteracting(true)
+    }
   }
 
   function preventScrollDuringSwipe(event: TouchEvent<HTMLElement>) {
@@ -130,6 +167,23 @@ export default function Home() {
 
     if (mode === 'fan') {
       event.preventDefault()
+      const now = Date.now()
+      const nextTranslateX =
+        touchStartTranslateX.current + event.touches[0].clientX - touchStartX.current
+      const deltaX = event.touches[0].clientX - lastTouchX.current
+      const deltaTime = Math.max(now - lastTouchTime.current, 1)
+
+      currentTranslateX.current = nextTranslateX
+      velocity.current = (deltaX / deltaTime) * 16
+      lastTouchX.current = event.touches[0].clientX
+      lastTouchTime.current = now
+      setFanTranslateX(nextTranslateX)
+      updateCurrentIndexFromTranslate(nextTranslateX)
+
+      if (Math.abs(event.touches[0].clientX - touchStartX.current) > 6) {
+        suppressFanClick.current = true
+        setHighlightedIndex(null)
+      }
       return
     }
 
@@ -144,14 +198,29 @@ export default function Home() {
     const deltaX = event.changedTouches[0].clientX - touchStartX.current
 
     if (mode === 'fan') {
-      if (Math.abs(deltaX) > swipeThreshold) {
-        setCurrentIndex((index) => {
-          if (items.length === 0) return 0
-          return clampIndex(index + (deltaX < 0 ? 1 : -1), items.length)
-        })
-        setHighlightedIndex(null)
-        suppressFanClick.current = true
+      if (Math.abs(deltaX) > 6) suppressFanClick.current = true
+      const runInertia = () => {
+        velocity.current *= 0.95
+        currentTranslateX.current += velocity.current
+        setFanTranslateX(currentTranslateX.current)
+        updateCurrentIndexFromTranslate(currentTranslateX.current)
+
+        if (Math.abs(velocity.current) < 0.5) {
+          velocity.current = 0
+          setIsFanInteracting(false)
+          inertiaFrame.current = null
+          return
+        }
+
+        inertiaFrame.current = window.requestAnimationFrame(runInertia)
       }
+
+      if (Math.abs(velocity.current) >= 0.5) {
+        inertiaFrame.current = window.requestAnimationFrame(runInertia)
+      } else {
+        setIsFanInteracting(false)
+      }
+
       return
     }
 
@@ -220,10 +289,9 @@ export default function Home() {
 
   function getFanCardStyle(index: number): CSSProperties {
     const total = items.length
-    const cardWidth = 200
-    const cardStep = 30
-    const spreadWidth = cardWidth + Math.max(total - 1, 0) * cardStep
-    const x = -spreadWidth / 2 + cardWidth / 2 + index * cardStep
+    const spreadWidth = fanCardWidth + Math.max(total - 1, 0) * fanCardStep
+    const x =
+      -spreadWidth / 2 + fanCardWidth / 2 + index * fanCardStep + fanTranslateX
     const centerIndex = (total - 1) / 2
     const maxDistance = Math.max(centerIndex, total - 1 - centerIndex, 1)
     const distanceFromCenter = Math.abs(index - centerIndex)
@@ -233,7 +301,9 @@ export default function Home() {
     const isPulledCard = pullingIndex === index
     const yLift = isHighlighted ? -40 : 0
     const pullY = isPulling ? (isPulledCard ? '-100vh' : '100vh') : null
-    const transition = isPulling
+    const transition = isFanInteracting
+      ? 'none'
+      : isPulling
       ? isPulledCard
         ? 'transform 0.2s ease-in, box-shadow 0.2s ease-in'
         : 'transform 0.3s ease-in, box-shadow 0.3s ease-in'
