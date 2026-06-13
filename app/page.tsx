@@ -39,7 +39,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
-  const [isFanSpread, setIsFanSpread] = useState(true)
+  const [isSpread, setIsSpread] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
@@ -148,7 +148,7 @@ export default function Home() {
     return {
       opacity: 1,
       pointerEvents: 'auto',
-      transform: `translateX(calc(-50% + ${relativeIndex * 60}px)) translateY(${
+      transform: `translateX(calc(-50% + ${relativeIndex * 104}px)) translateY(${
         94 + distance * 10
       }px) rotate(${relativeIndex * 8}deg)`,
       transformOrigin: '50% 100%',
@@ -158,7 +158,7 @@ export default function Home() {
 
   function selectCard(index: number) {
     setActiveIndex(index)
-    setIsFanSpread(false)
+    setIsSpread(false)
     setDragOffsetY(0)
     touchMode.current = null
   }
@@ -189,7 +189,7 @@ export default function Home() {
     if (touchMode.current === 'vertical') {
       event.preventDefault()
       suppressNextClick.current = true
-      if (!isFanSpread) {
+      if (!isSpread) {
         setDragOffsetY(Math.min(0, deltaY))
       }
     }
@@ -203,7 +203,7 @@ export default function Home() {
     const absX = Math.abs(deltaX)
     const absY = Math.abs(deltaY)
 
-    if (isFanSpread) {
+    if (isSpread) {
       if (deltaY <= -swipeThreshold && absY > absX) {
         const index = touchedCardIndex.current ?? activeCardIndex
         selectCard(index)
@@ -239,7 +239,7 @@ export default function Home() {
           : Math.max(0, currentIndex - 1)
       return nextIndex
     })
-    setIsFanSpread(true)
+    setIsSpread(true)
   }
 
   function handleSwipeUpDelete() {
@@ -389,8 +389,8 @@ export default function Home() {
               expandedId ? 'min-h-[760px]' : 'min-h-[560px]'
             }`}
             onClick={() => {
-              if (!isFanSpread && !expandedId) {
-                setIsFanSpread(true)
+              if (!isSpread && !expandedId) {
+                setIsSpread(true)
               }
             }}
             onTouchStart={handleTouchStart}
@@ -401,7 +401,7 @@ export default function Home() {
               const isActive = index === activeCardIndex
               const isExpanded = expandedId === item.id
               const isSideCard = Math.abs(index - activeCardIndex) === 1
-              const cardStyle = isFanSpread
+              const cardStyle = isSpread
                 ? getFanSpreadStyle(index)
                 : getCardStyle(index)
 
@@ -413,7 +413,7 @@ export default function Home() {
                   } ${isExpanded ? 'min-h-[700px]' : 'min-h-[460px]'}`}
                   style={{
                     ...cardStyle,
-                    opacity: isFanSpread
+                    opacity: isSpread
                       ? 1
                       : isExpanded
                         ? 1
@@ -440,7 +440,7 @@ export default function Home() {
                       return
                     }
                     if (expandedId) return
-                    if (isFanSpread) {
+                    if (isSpread) {
                       selectCard(index)
                       return
                     }
