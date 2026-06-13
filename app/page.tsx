@@ -39,6 +39,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
+  const [isFanSpread, setIsFanSpread] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditForm>(emptyEditForm)
   const [isUploading, setIsUploading] = useState(false)
@@ -50,6 +51,7 @@ export default function Home() {
   const touchStartY = useRef(0)
   const touchMode = useRef<TouchMode>(null)
   const suppressNextClick = useRef(false)
+  const touchedCardIndex = useRef<number | null>(null)
 
   const activeCardIndex =
     items.length > 0 ? Math.min(activeIndex, items.length - 1) : 0
@@ -138,6 +140,29 @@ export default function Home() {
     }
   }
 
+  function getFanSpreadStyle(index: number): CSSProperties {
+    const centerIndex = (items.length - 1) / 2
+    const relativeIndex = index - centerIndex
+    const distance = Math.abs(relativeIndex)
+
+    return {
+      opacity: 1,
+      pointerEvents: 'auto',
+      transform: `translateX(calc(-50% + ${relativeIndex * 60}px)) translateY(${
+        94 + distance * 10
+      }px) rotate(${relativeIndex * 8}deg)`,
+      transformOrigin: '50% 100%',
+      zIndex: 100 - distance,
+    }
+  }
+
+  function selectCard(index: number) {
+    setActiveIndex(index)
+    setIsFanSpread(false)
+    setDragOffsetY(0)
+    touchMode.current = null
+  }
+
   function handleTouchStart(event: TouchEvent<HTMLElement>) {
     touchStartX.current = event.touches[0].clientX
     touchStartY.current = event.touches[0].clientY
@@ -164,7 +189,9 @@ export default function Home() {
     if (touchMode.current === 'vertical') {
       event.preventDefault()
       suppressNextClick.current = true
-      setDragOffsetY(Math.min(0, deltaY))
+      if (!isFanSpread) {
+        setDragOffsetY(Math.min(0, deltaY))
+      }
     }
   }
 
@@ -175,6 +202,19 @@ export default function Home() {
     const deltaY = event.changedTouches[0].clientY - touchStartY.current
     const absX = Math.abs(deltaX)
     const absY = Math.abs(deltaY)
+
+    if (isFanSpread) {
+      if (deltaY <= -swipeThreshold && absY > absX) {
+        const index = touchedCardIndex.current ?? activeCardIndex
+        selectCard(index)
+        suppressNextClick.current = true
+      }
+
+      setDragOffsetY(0)
+      touchMode.current = null
+      touchedCardIndex.current = null
+      return
+    }
 
     if (touchMode.current === 'vertical' || (deltaY < 0 && absY > absX)) {
       suppressNextClick.current = true
@@ -193,9 +233,13 @@ export default function Home() {
     if (Math.abs(deltaX) < swipeThreshold) return
 
     setActiveIndex((currentIndex) => {
-      if (deltaX < 0) return Math.min(items.length - 1, currentIndex + 1)
-      return Math.max(0, currentIndex - 1)
+      const nextIndex =
+        deltaX < 0
+          ? Math.min(items.length - 1, currentIndex + 1)
+          : Math.max(0, currentIndex - 1)
+      return nextIndex
     })
+    setIsFanSpread(true)
   }
 
   function handleSwipeUpDelete() {
@@ -344,6 +388,11 @@ export default function Home() {
             className={`relative overflow-hidden overflow-x-hidden transition-[min-height] duration-300 ease-out ${
               expandedId ? 'min-h-[760px]' : 'min-h-[560px]'
             }`}
+            onClick={() => {
+              if (!isFanSpread && !expandedId) {
+                setIsFanSpread(true)
+              }
+            }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -352,6 +401,9 @@ export default function Home() {
               const isActive = index === activeCardIndex
               const isExpanded = expandedId === item.id
               const isSideCard = Math.abs(index - activeCardIndex) === 1
+              const cardStyle = isFanSpread
+                ? getFanSpreadStyle(index)
+                : getCardStyle(index)
 
               return (
                 <article
@@ -360,24 +412,38 @@ export default function Home() {
                     isActive ? 'cursor-pointer' : 'cursor-pointer'
                   } ${isExpanded ? 'min-h-[700px]' : 'min-h-[460px]'}`}
                   style={{
-                    ...getCardStyle(index),
-                    opacity: isExpanded
+                    ...cardStyle,
+                    opacity: isFanSpread
                       ? 1
-                      : isSideCard
-                        ? 0.6
-                        : getCardStyle(index).opacity,
+                      : isExpanded
+                        ? 1
+                        : expandedId
+                          ? 0.4
+                          : !isActive
+                            ? 0.3
+                            : isSideCard
+                              ? 0.6
+                              : cardStyle.opacity,
                     transitionDuration:
                       isActive && dragOffsetY !== 0 && !flyingDeleteId
                         ? '0ms'
                         : undefined,
                     willChange: 'transform',
                   }}
-                  onClick={() => {
+                  onTouchStart={() => {
+                    touchedCardIndex.current = index
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation()
                     if (suppressNextClick.current) {
                       suppressNextClick.current = false
                       return
                     }
                     if (expandedId) return
+                    if (isFanSpread) {
+                      selectCard(index)
+                      return
+                    }
                     if (!isActive) {
                       setActiveIndex(index)
                       return
