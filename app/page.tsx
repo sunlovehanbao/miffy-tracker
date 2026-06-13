@@ -218,12 +218,18 @@ export default function Home() {
 
   function getFanCardStyle(index: number): CSSProperties {
     const total = items.length
-    const stackPosition = total > 0 ? (index - currentIndex + total) % total : 0
-    const stackOffset = stackPosition * 4
+    const cardWidth = 200
+    const cardStep = 180
+    const spreadWidth = cardWidth + Math.max(total - 1, 0) * cardStep
+    const x = -spreadWidth / 2 + cardWidth / 2 + index * cardStep
+    const centerIndex = (total - 1) / 2
+    const maxDistance = Math.max(centerIndex, total - 1 - centerIndex, 1)
+    const distanceFromCenter = Math.abs(index - centerIndex)
+    const yArc = (distanceFromCenter / maxDistance) * 14
     const isHighlighted = highlightedIndex === index
     const isPulling = pullingIndex !== null && pullStage === 'pulling'
     const isPulledCard = pullingIndex === index
-    const yLift = isHighlighted ? -30 : 0
+    const yLift = isHighlighted ? -40 : 0
     const pullY = isPulling ? (isPulledCard ? '-100vh' : '100vh') : null
     const transition = isFanDragging
       ? 'none'
@@ -241,12 +247,12 @@ export default function Home() {
       width: '200px',
       height: '300px',
       opacity: 1,
-      transform: `translateX(calc(-50% + ${stackOffset}px)) translateY(${
-        pullY || `calc(-50% + ${stackOffset + yLift}px)`
+      transform: `translateX(calc(-50% + ${x}px)) translateY(${
+        pullY || `calc(-50% + ${yArc + yLift}px)`
       }) rotate(0deg)`,
       transformOrigin: '50% 50%',
       transition,
-      zIndex: isHighlighted || isPulledCard ? 300 : 200 - stackPosition,
+      zIndex: isPulledCard ? 300 : 100 + index,
       boxShadow: isHighlighted || isPulledCard
         ? '0 0 25px rgba(255,215,0,0.9)'
         : '0 4px 12px rgba(255,183,197,0.3)',
